@@ -1,0 +1,18 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# ASP.NET generated and local files
+appsettings.Development.json
+Properties/launchSettings.json
+
+# NuGet packages
+packages/
+*.nupkg
