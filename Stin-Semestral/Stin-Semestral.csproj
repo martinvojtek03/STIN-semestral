@@ -7,6 +7,7 @@
     <RootNamespace>Stin_Semestral</RootNamespace>
     <InvariantGlobalization>true</InvariantGlobalization>
     <PublishAot>false</PublishAot>
+    <UserSecretsId>51416bf8-99e9-4fce-955f-6c29efdb6b2e</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
