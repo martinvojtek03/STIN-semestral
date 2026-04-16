@@ -1,0 +1,11 @@
+@Stin_Semestral_HostAddress = http://localhost:5080
+
+GET {{Stin_Semestral_HostAddress}}/todos/
+Accept: application/json
+
+###
+
+GET {{Stin_Semestral_HostAddress}}/todos/1
+Accept: application/json
+
+###

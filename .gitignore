@@ -1,0 +1,51 @@
+## --- DOTNET / VISUAL STUDIO ---
+# Ignoruje binární data a doèasné soubory z buildu
+[Bb]in/
+[Oo]bj/
+[Tt]est[Rr]esults/
+
+# Uživatelské nastavení Visual Studia a doèasné soubory
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+
+# NuGet balíèky (stahují se automaticky pøi buildu, není tøeba je verzovat)
+packages/
+*.nupkg
+# Pokud používáš .NET Core/5+, balíèky se ukládají v profilu uživatele, 
+# ale složka 'project.lock.json' nebo 'project.assets.json' se mùže objevit
+project.assets.json
+
+## --- DATABÁZE (SQLite) ---
+# Ignoruje lokální soubor databáze, aby se nepøebíjela data mezi vývojáøi
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+## --- FRONTEND (Node.js / React) ---
+# Pokud tvùj projekt obsahuje webový frontend, tohle zabrání nahrání tisícù knihoven
+node_modules/
+npm-debug.log*
+dist/
+build/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+## --- OPERAÈNÍ SYSTÉMY ---
+# Windows balast
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# macOS balast
+.DS_Store
+
+## --- KONFIGURACE / TAJEMSTVÍ ---
+# Ignoruje soubory, které by mohly obsahovat hesla nebo API klíèe
+appsettings.Development.json
+secrets.
