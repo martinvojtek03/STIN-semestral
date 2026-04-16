@@ -9,10 +9,6 @@
 *.userosscache
 *.sln.docstates
 
-# ASP.NET generated and local files
-appsettings.Development.json
-Properties/launchSettings.json
-
 # NuGet packages
 packages/
 *.nupkg
