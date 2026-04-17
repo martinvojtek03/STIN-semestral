@@ -1,5 +1,8 @@
-﻿public class ApiMetadata
+﻿namespace Stin_Semestral.Models
 {
-    public int Id { get; set; }
-    public DateTime LastUpdate { get; set; } // Převedený timestamp z API
+    public class ApiMetadata
+    {
+        public int Id { get; set; }
+        public DateTime LastUpdate { get; set; } // Převedený timestamp z API
+    }
 }
