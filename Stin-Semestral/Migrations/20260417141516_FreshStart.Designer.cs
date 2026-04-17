@@ -11,8 +11,8 @@ using Stin_Semestral.Data;
 namespace Stin_Semestral.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260417093630_RecreateTables")]
-    partial class RecreateTables
+    [Migration("20260417141516_FreshStart")]
+    partial class FreshStart
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
