@@ -36,7 +36,7 @@ namespace Stin_Semestral.Services
             try
             {
                 // URL pro exchangerate.host API s použitím načteného klíče
-                string url = $"https://api.exchangerate.host/live?access_key={_apiKey}";
+                string url = $"https://api.exchangerate.host/live?access_key={_apiKey}&source=USD";
 
                 var response = await _httpClient.GetStringAsync(url);
 
