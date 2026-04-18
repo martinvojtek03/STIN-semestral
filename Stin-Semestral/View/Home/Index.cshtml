@@ -1,0 +1,47 @@
+﻿@model List<Stin_Semestral.Models.Currency>
+
+<div class="container mt-5">
+    <h1>Směnárna</h1>
+
+    <div class="mb-3">
+        <form asp-action="UpdateRates" method="post">
+            <button type="submit" class="btn btn-primary">Aktualizovat data z API</button>
+        </form>
+    </div>
+
+    @if (ViewBag.LastUpdate != null)
+    {
+        <p>Poslední aktualizace: @ViewBag.LastUpdate</p>
+    }
+
+    <hr />
+
+    @if (Model == null || !Model.Any())
+    {
+        @* TOTO SE ZOBRAZÍ, KDYŽ JE DB PRÁZDNÁ *@
+        <div class="alert alert-warning">
+            Databáze je momentálně prázdná. Klikněte na tlačítko výše pro stažení aktuálních kurzů.
+        </div>
+    }
+    else
+    {
+        @* TOTO SE ZOBRAZÍ, KDYŽ UŽ DATA MÁME *@
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Měna</th>
+                    <th>Kurz (USD)</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model)
+                {
+                    <tr>
+                        <td>@item.name</td>
+                        <td>@item.price</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
