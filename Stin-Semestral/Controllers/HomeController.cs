@@ -29,7 +29,6 @@ namespace Stin_Semestral.Controllers
             DateTime thirtyDaysAgo = DateTime.Today.AddDays(-30);
 
             // 2. Načtení všech potřebných dat jedním dotazem (Rychlost dle bodu 3.5)
-            // Načítáme historii sledovaných měn + historii základní měny pro přepočet
             var relevantCurrencies = watched.ToList();
             if (!relevantCurrencies.Contains(settings.BaseCurrency))
                 relevantCurrencies.Add(settings.BaseCurrency);
@@ -53,8 +52,8 @@ namespace Stin_Semestral.Controllers
 
             foreach (var name in watched)
             {
-                var history = allData.Where(c => c.Name == name).ToList();
-                var today = history.OrderByDescending(h => h.Date).FirstOrDefault();
+                var history = allData.Where(c => c.Name == name).OrderBy(h => h.Date).ToList();
+                var today = history.LastOrDefault();
 
                 if (today == null) continue;
 
@@ -69,25 +68,39 @@ namespace Stin_Semestral.Controllers
                     Name = name,
                     CurrentRate = today.Rate / (baseCurrencyMap.GetValueOrDefault(today.Date.Date, 1.0m)),
                     Average30Days = convertedRates.Any() ? convertedRates.Average() : 0,
-                    HistoryJson = JsonSerializer.Serialize(convertedRates.TakeLast(10)) // Pro malý graf
+                    // Oprava: Bereme posledních 30 měření pro kompletní graf
+                    HistoryJson = JsonSerializer.Serialize(convertedRates.TakeLast(30))
                 });
             }
 
-            // 5. Nejsilnější a nejslabší měna (Bod 3.2 - Dle nominální hodnoty)
-            // Vynecháváme základní měnu, protože ta je vždy 1.0
+            // 5. OPRAVA: Nejsilnější a nejslabší měna (Bod 3.2)
+            // Nejsilnější měna = nejvyšší hodnota (např. 1 GBP stojí hodně USD -> kurz je malé číslo jako 0.7)
+            // Nejslabší měna = nejnižší hodnota (např. 1 SOS stojí málo USD -> kurz je velké číslo jako 500+)
             var competitors = displayData.Where(d => d.Name != settings.BaseCurrency).ToList();
             if (competitors.Any())
             {
-                ViewBag.Strongest = competitors.OrderByDescending(x => x.CurrentRate).First();
-                ViewBag.Weakest = competitors.OrderBy(x => x.CurrentRate).First();
+                // Nejsilnější = nejmenší kurz (OrderBy)
+                ViewBag.Strongest = competitors.OrderBy(x => x.CurrentRate).First();
+
+                // Nejslabší = největší kurz (OrderByDescending)
+                ViewBag.Weakest = competitors.OrderByDescending(x => x.CurrentRate).First();
             }
 
             ViewBag.BaseCurrency = settings.BaseCurrency;
+            ViewBag.LastUpdate = latestDate.ToString("dd.MM.yyyy HH:mm");
             return View(displayData);
         }
 
-
-
-
+        // --- POMOCNÁ METODA PRO RUČNÍ AKTUALIZACI ---
+        [HttpPost]
+        public async Task<IActionResult> UpdateRates()
+        {
+            string json = await _exchangeService.GetExchangeRatesAsync();
+            if (!string.IsNullOrEmpty(json))
+            {
+                await _exchangeService.UpdateDatabaseRatesAsync(json);
+            }
+            return RedirectToAction("Index");
+        }
     }
 }
