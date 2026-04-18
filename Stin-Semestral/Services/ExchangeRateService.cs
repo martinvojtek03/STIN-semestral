@@ -19,9 +19,7 @@ namespace Stin_Semestral.Services
             _httpClient = httpClient;
             _apiKey = configuration["ExchangeRateApi:ApiKey"] ?? "";
             _logger = logger;
-
         }
-
 
         public async Task<string> GetHistoricalRatesAsync(int daysBack)
         {
@@ -33,12 +31,9 @@ namespace Stin_Semestral.Services
 
             try
             {
-                // 1. Výpočet data (dnes minus počet dní)
                 DateTime targetDate = DateTime.Today.AddDays(-daysBack);
                 string dateString = targetDate.ToString("yyyy-MM-dd");
 
-                // 2. Sestavení URL pro endpoint /historical
-                // API dokumentace vyžaduje parametr 'date'
                 string url = $"https://api.exchangerate.host/historical?access_key={_apiKey}&date={dateString}&source=USD";
 
                 var response = await _httpClient.GetStringAsync(url);
@@ -53,7 +48,7 @@ namespace Stin_Semestral.Services
             }
         }
 
-        public async Task<string> GetExchangeRatesAsync() //stáhne aktuální kurzy měn
+        public async Task<string> GetExchangeRatesAsync()
         {
             if (string.IsNullOrEmpty(_apiKey))
             {
@@ -78,11 +73,64 @@ namespace Stin_Semestral.Services
             }
         }
 
+        public async Task UpdateDatabaseTimeframeAsync(int daysBack)
+        {
+            if (string.IsNullOrEmpty(_apiKey)) return;
+
+            try
+            {
+                // 1. Příprava dat (od -daysBack do včerejška)
+                string startDate = DateTime.Today.AddDays(-daysBack).ToString("yyyy-MM-dd");
+                string endDate = DateTime.Today.AddDays(-1).ToString("yyyy-MM-dd");
+
+                // 2. Volání Timeframe endpointu
+                string url = $"https://api.exchangerate.host/timeframe?access_key={_apiKey}&start_date={startDate}&end_date={endDate}&source=USD";
+                var response = await _httpClient.GetStringAsync(url);
+
+                // 3. Deserializace (použijeme novou třídu TimeframeResponse)
+                var data = JsonSerializer.Deserialize<TimeframeResponse>(response,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (data != null && data.Success)
+                {
+                    foreach (var dateEntry in data.Quotes)
+                    {
+                        DateTime currentDay = DateTime.Parse(dateEntry.Key);
+                        var dayQuotes = dateEntry.Value;
+
+                        // Opět ručně přidáme USD pro každý den, pokud chybí
+                        if (!dayQuotes.ContainsKey("USDUSD")) dayQuotes.Add("USDUSD", 1.0m);
+
+                        foreach (var quote in dayQuotes)
+                        {
+                            string currencyName = quote.Key.Length > 3 && quote.Key.StartsWith("USD")
+                                ? quote.Key.Substring(3)
+                                : quote.Key;
+
+                            if (string.IsNullOrEmpty(currencyName)) currencyName = "USD";
+
+                            _context.Currencies.Add(new Currency
+                            {
+                                Name = currencyName,
+                                Rate = quote.Value,
+                                Date = currentDay
+                            });
+                        }
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await _logger.LogMessage("INFO", $"Historie za posledních {daysBack} dní úspěšně stažena a uložena.");
+                }
+            }
+            catch (Exception ex)
+            {
+                await _logger.LogMessage("ERROR", $"Chyba při stahování timeframe: {ex.Message}");
+            }
+        }
         public async Task UpdateDatabaseRatesAsync(string jsonText)
         {
             if (string.IsNullOrEmpty(jsonText)) return;
 
-            // Deserializace JSONu (používáme tvůj ExchangeRateResponse)
             var data = JsonSerializer.Deserialize<ExchangeRateResponse>(jsonText,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
@@ -90,30 +138,38 @@ namespace Stin_Semestral.Services
             {
                 try
                 {
-                    // Převod Unix timestampu z JSONu na DateTime
                     DateTime rateDate = DateTimeOffset.FromUnixTimeSeconds(data.Timestamp).DateTime;
+
+                    // --- OPRAVA: RUČNÍ PŘIDÁNÍ USD ---
+                    // Pokud API vrací kurzy vůči USD, samo USD v Quotes nebude. 
+                    // Přidáme ho, aby bylo dostupné pro nastavení a přepočty.
+                    if (!data.Quotes.ContainsKey("USDUSD") && !data.Quotes.ContainsKey("USD"))
+                    {
+                        data.Quotes.Add("USDUSD", 1.0m);
+                    }
 
                     foreach (var quote in data.Quotes)
                     {
-                        // Uřezáváme "USD" z názvů (např. USDCZK -> CZK)
-                        string currencyName = quote.Key.StartsWith("USD")
+                        // Uřezáváme "USD" z názvů (např. USDCZK -> CZK, USDUSD -> USD)
+                        string currencyName = quote.Key.Length > 3 && quote.Key.StartsWith("USD")
                             ? quote.Key.Substring(3)
                             : quote.Key;
 
-                        // Vytvoříme nový záznam typu Currency
+                        // Pokud by po uříznutí zbyl prázdný řetězec (u klíče "USD"), nastavíme natvrdo "USD"
+                        if (string.IsNullOrEmpty(currencyName)) currencyName = "USD";
+
                         var newCurrencyRecord = new Currency
                         {
                             Name = currencyName,
                             Rate = quote.Value,
-                            Date = rateDate // Ukládáme datum z JSONu
+                            Date = rateDate
                         };
 
                         _context.Currencies.Add(newCurrencyRecord);
                     }
-                    // Uložení všech změn najednou
-                    await _context.SaveChangesAsync();
 
-                    await _logger.LogMessage("INFO", $"Uloženo {data.Quotes.Count} kurzů pro datum {rateDate.ToShortDateString()}.");
+                    await _context.SaveChangesAsync();
+                    await _logger.LogMessage("INFO", $"Uloženo {data.Quotes.Count} kurzů (včetně USD) pro datum {rateDate.ToShortDateString()}.");
                 }
                 catch (Exception ex)
                 {
@@ -121,16 +177,24 @@ namespace Stin_Semestral.Services
                 }
             }
         }
-
-        
     }
 
-    // Pomocné třídy pro mapování JSONu z API
     public class ExchangeRateResponse
     {
         public bool Success { get; set; }
         public long Timestamp { get; set; }
         public string Source { get; set; } = string.Empty;
         public Dictionary<string, decimal> Quotes { get; set; } = new();
+    }
+    public class TimeframeResponse
+    {
+        public bool Success { get; set; }
+        public bool Timeframe { get; set; }
+        public string Start_Date { get; set; } = string.Empty;
+        public string End_Date { get; set; } = string.Empty;
+        public string Source { get; set; } = string.Empty;
+
+        // Klíčem je datum "yyyy-MM-dd", hodnotou je slovník kurzů pro daný den
+        public Dictionary<string, Dictionary<string, decimal>> Quotes { get; set; } = new();
     }
 }

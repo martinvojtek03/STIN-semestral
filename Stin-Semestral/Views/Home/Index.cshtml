@@ -1,100 +1,146 @@
-﻿@model List<Stin_Semestral.Models.Currency>
+﻿@model List<Stin_Semestral.Models.CurrencyViewModel>
 
 @{
-    ViewData["Title"] = "Kurzovní lístek";
+    ViewData["Title"] = "Přehled měn";
 }
 
 <div class="container mt-4">
-    <div class="row mb-4 align-items-center bg-white p-4 rounded shadow-sm border">
-        <div class="col-md-7">
-            <h2 class="fw-bold text-dark mb-1">
-                <i class="bi bi-graph-up-arrow text-primary me-2"></i>Moje sledované kurzy
-            </h2>
-            <p class="text-muted mb-0">
-                Základní měna: <span class="badge bg-primary fs-6">1 @ViewBag.BaseCurrency</span> |
-                Aktualizováno: <strong>@ViewBag.LastUpdate</strong>
-            </p>
+    <div class="row mb-4">
+        <div class="col-md-4 mb-3">
+            <div class="card shadow-sm border-0 h-100 bg-primary text-white text-center p-3">
+                <h6 class="text-uppercase small fw-bold opacity-75">Základní měna</h6>
+                <h2 class="fw-bold mb-0">1 @ViewBag.BaseCurrency</h2>
+            </div>
         </div>
-        <div class="col-md-5 text-md-end mt-3 mt-md-0">
-            <a asp-controller="Settings" asp-action="Index" class="btn btn-outline-primary btn-lg shadow-sm">
-                <i class="bi bi-gear-fill me-2"></i>Upravit sledování
-            </a>
-
-            <form asp-action="UpdateRates" method="post" class="d-inline ms-2">
-                <button type="submit" class="btn btn-primary btn-lg shadow-sm" title="Stáhnout nová data z API">
-                    <i class="bi bi-arrow-clockwise"></i>
-                </button>
-            </form>
-        </div>
+        @if (ViewBag.Strongest != null)
+        {
+            <div class="col-md-4 mb-3">
+                <div class="card shadow-sm border-0 h-100 bg-success text-white text-center p-3">
+                    <h6 class="text-uppercase small fw-bold opacity-75">Nejsilnější měna</h6>
+                    <h2 class="fw-bold mb-0">@ViewBag.Strongest.Name</h2>
+                    <div>@ViewBag.Strongest.CurrentRate.ToString("N4")</div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="card shadow-sm border-0 h-100 bg-danger text-white text-center p-3">
+                    <h6 class="text-uppercase small fw-bold opacity-75">Nejslabší měna</h6>
+                    <h2 class="fw-bold mb-0">@ViewBag.Weakest.Name</h2>
+                    <div>@ViewBag.Weakest.CurrentRate.ToString("N4")</div>
+                </div>
+            </div>
+        }
     </div>
 
-    @if (TempData["Success"] != null)
-    {
-        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
-            <i class="bi bi-check-circle-fill me-2"></i> @TempData["Success"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    <div class="card shadow-sm border-0 mb-5">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+            <h5 class="mb-0 fw-bold">Aktuální kurzy a průměry</h5>
+            <a asp-controller="Settings" asp-action="Index" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-gear-fill"></i> Nastavení
+            </a>
         </div>
-    }
-
-    <div class="card shadow-sm border-0">
-        <div class="table-responsive" style="max-height: 700px;">
+        <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
-                <thead class="sticky-top">
+                <thead class="bg-light small">
                     <tr>
-                        <th class="ps-4" style="width: 30%;">Měna</th>
-                        <th style="width: 40%;">Aktuální kurz (v @ViewBag.BaseCurrency)</th>
-                        <th style="width: 30%;">Datum záznamu</th>
+                        <th class="ps-4">MĚNA</th>
+                        <th>KURZ (@ViewBag.BaseCurrency)</th>
+                        <th>30D PRŮMĚR</th>
+                        <th>STAV</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @if (Model != null && Model.Any())
-                    {
-                        foreach (var item in Model)
-                        {
-                            <tr>
-                                <td class="ps-4">
-                                    <span class="fw-bold text-dark fs-5">@item.Name</span>
-                                    @if (item.Name == ViewBag.BaseCurrency)
-                                    {
-                                        <span class="ms-2 badge rounded-pill bg-light text-primary border border-primary small">Základ</span>
-                                    }
-                                </td>
-                                <td>
-                                    <span class="font-monospace fs-4 fw-bold text-primary">
-                                        @item.Rate.ToString("N4")
-                                    </span>
-                                    <span class="text-muted ms-1 small">@ViewBag.BaseCurrency</span>
-                                </td>
-                                <td>
-                                    <span class="text-muted">
-                                        <i class="bi bi-calendar3 me-1"></i> @item.Date.ToString("dd.MM.yyyy")
-                                        <i class="bi bi-clock ms-2 me-1"></i> @item.Date.ToString("HH:mm")
-                                    </span>
-                                </td>
-                            </tr>
-                        }
-                    }
-                    else
+                    @foreach (var item in Model)
                     {
                         <tr>
-                            <td colspan="3" class="text-center py-5">
-                                <div class="text-muted">
-                                    <i class="bi bi-database-exclamation display-1"></i>
-                                    <p class="mt-3 fs-5">Nenalezena žádná data pro vybrané měny.</p>
-                                    <a asp-controller="Settings" asp-action="Index" class="btn btn-primary">
-                                        Přejít do nastavení
-                                    </a>
-                                </div>
+                            <td class="ps-4 fw-bold">@item.Name</td>
+                            <td class="text-primary fw-bold">@item.CurrentRate.ToString("N4")</td>
+                            <td>@item.Average30Days.ToString("N4")</td>
+                            <td>
+                                @if (item.CurrentRate >= item.Average30Days)
+                                {
+                                    <span class="text-success small"><i class="bi bi-arrow-up-right"></i> Nad průměrem</span>
+                                }
+                                else
+                                {
+                                    <span class="text-danger small"><i class="bi bi-arrow-down-right"></i> Pod průměrem</span>
+                                }
                             </td>
                         </tr>
                     }
                 </tbody>
             </table>
         </div>
-        <div class="card-footer bg-white py-3 text-center">
-            <small class="text-muted">
-                Kurzy jsou automaticky přepočítávány z výchozího kurzu USD poskytovaného API.
-            </small>
-        </div>
+    </div>
+
+    <h4 class="fw-bold mb-4">Historický vývoj vybraných měn</h4>
+    <div class="row">
+        @foreach (var item in Model)
+        {
+            @if (item.Name != ViewBag.BaseCurrency) // Základní měna graf nepotřebuje (je to rovná čára 1.0)
+            {
+                <div class="col-lg-6 mb-4">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="fw-bold mb-0">@item.Name / @ViewBag.BaseCurrency</h6>
+                                <span class="badge bg-light text-dark border">30 dní</span>
+                            </div>
+                            <div style="height: 200px; position: relative;">
+                                <canvas id="chart-@item.Name"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
     </div>
 </div>
+
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+        @foreach (var item in Model)
+        {
+            if (item.Name != ViewBag.BaseCurrency && !string.IsNullOrEmpty(item.HistoryJson))
+            {
+                <text>
+                            (function() {
+                                const ctx = document.getElementById('chart-@item.Name').getContext('2d');
+                                const data = @Html.Raw(item.HistoryJson);
+
+                                new Chart(ctx, {
+                                    type: 'line',
+                                    data: {
+                                        labels: data.map((_, i) => i + 1),
+                                        datasets: [{
+                                            label: 'Kurz',
+                                            data: data,
+                                            borderColor: '#0d6efd',
+                                            backgroundColor: 'rgba(13, 110, 253, 0.05)',
+                                            fill: true,
+                                            tension: 0.3,
+                                            pointRadius: 0, // Skryje body pro hladší vzhled
+                                            borderWidth: 2
+                                        }]
+                                    },
+                                    options: {
+                                        responsive: true,
+                                        maintainAspectRatio: false,
+                                        plugins: { legend: { display: false } },
+                                        scales: {
+                                            x: { display: false },
+                                            y: {
+                                                beginAtZero: false,
+                                                grace: '5%',
+                                                ticks: { font: { size: 10 } }
+                                            }
+                                        }
+                                    }
+                                });
+                            })();
+                </text>
+            }
+        }
+        });
+    </script>
+}
