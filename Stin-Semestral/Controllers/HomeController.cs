@@ -20,40 +20,41 @@ namespace Stin_Semestral.Controllers
         // --- HLAVNÍ STRÁNKA ---
         public async Task<IActionResult> Index()
         {
-            // 1. Získáme uživatelské nastavení (pokud neexistuje, vytvoříme default)
-            var settings = await _context.Settings.FirstOrDefaultAsync();
-            if (settings == null)
-            {
-                settings = new UserSettings { BaseCurrency = "EUR", SelectedCurrencies = "CZK,USD" };
-                _context.Settings.Add(settings);
-                await _context.SaveChangesAsync();
-            }
+            // Načtení nastavení z _context.Settings
+            var settings = await _context.Settings.FirstOrDefaultAsync()
+                           ?? new UserSettings { BaseCurrency = "USD", SelectedCurrencies = "CZK,EUR,USD" };
 
-            // 2. Převedeme string "CZK,USD" na seznam (List<string>) pro snadné filtrování
-            var watchedCurrencies = settings.SelectedCurrencies
-                .Split(',', StringSplitOptions.RemoveEmptyEntries)
-                .Select(c => c.Trim().ToUpper())
+            if (!await _context.Currencies.AnyAsync()) return View(new List<Currency>());
+
+            var latestDate = await _context.Currencies.MaxAsync(c => c.Date);
+            var allRates = await _context.Currencies.Where(c => c.Date == latestDate).ToListAsync();
+
+            // Kurz základní měny (např. EUR) vůči USD pro přepočet
+            var baseCurrencyObj = allRates.FirstOrDefault(r => r.Name == settings.BaseCurrency);
+            decimal baseValue = (baseCurrencyObj != null && baseCurrencyObj.Rate != 0) ? baseCurrencyObj.Rate : 1.0m;
+
+            var watched = settings.SelectedCurrencies?.Split(',') ?? new string[0];
+
+            // Výpočet kurzů vůči zvolené základní měně
+            var displayRates = allRates
+                .Where(r => watched.Contains(r.Name))
+                .Select(r => new Currency
+                {
+                    Name = r.Name,
+                    Rate = r.Rate / baseValue, // Přepočet: (Cílový kurz / Základní kurz)
+                    Date = r.Date
+                })
+                .OrderBy(r => r.Name)
                 .ToList();
 
-            // 3. Najdeme nejnovější datum v DB
-            var latestDate = await _context.Currencies.AnyAsync()
-                ? await _context.Currencies.MaxAsync(c => c.Date)
-                : DateTime.MinValue;
+            ViewBag.BaseCurrency = settings.BaseCurrency;
+            ViewBag.LastUpdate = latestDate.ToString("g");
 
-            // 4. Načteme kurzy, které jsou v seznamu sledovaných měn
-            var rates = await _context.Currencies
-                .Where(c => c.Date == latestDate && watchedCurrencies.Contains(c.Name))
-                .OrderBy(c => c.Name)
-                .ToListAsync();
-
-            ViewBag.LastUpdate = latestDate == DateTime.MinValue ? "Nikdy" : latestDate.ToString("g");
-            ViewBag.BaseCurrency = settings.BaseCurrency; // Předáme informaci o hlavní měně
-
-            return View(rates);
+            return View(displayRates);
         }
 
-        
 
-        
+
+
     }
 }
