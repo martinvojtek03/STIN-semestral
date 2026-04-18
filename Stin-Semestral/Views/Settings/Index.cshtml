@@ -1,0 +1,64 @@
+﻿@model Stin_Semestral.Models.UserSettings
+
+@{
+    ViewData["Title"] = "Nastavení";
+}
+
+<div class="container mt-4">
+    <div class="card shadow border-0">
+        <div class="card-header bg-primary text-white py-3">
+            <h4 class="mb-0"><i class="bi bi-gear-fill me-2"></i> Nastavení aplikace</h4>
+        </div>
+        <div class="card-body p-4">
+
+            @if (TempData["Success"] != null)
+            {
+                <div class="alert alert-success alert-dismissible fade show shadow-sm mb-4">
+                    <i class="bi bi-check-circle me-2"></i> @TempData["Success"]
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            }
+
+            <form asp-action="Save" method="post">
+                <div class="mb-5 p-3 bg-light rounded border">
+                    <label class="form-label fw-bold fs-5">Základní měna pro srovnání:</label>
+                    <div class="col-md-3">
+                        <select name="baseCurrency" class="form-select form-select-lg border-primary">
+                            @foreach (var curr in (List<string>)ViewBag.AllCurrencies)
+                            {
+                                <option value="@curr" selected="@(curr == Model.BaseCurrency)">@curr</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label fw-bold fs-5">Sledované měny v tabulci:</label>
+                    <div class="row row-cols-2 row-cols-md-4 row-cols-lg-6 g-3 mt-1">
+                        @{
+                            var selectedList = Model.SelectedCurrencies?.Split(',').ToList() ?? new List<string>();
+                        }
+                        @foreach (var curr in (List<string>)ViewBag.AllCurrencies)
+                        {
+                            <div class="col">
+                                <div class="form-check card p-2 border-light shadow-sm h-100 bg-white">
+                                    <div class="d-flex align-items-center">
+                                        <input class="form-check-input ms-1" type="checkbox" name="selectedCurrencies"
+                                               value="@curr" id="check_@curr" @(selectedList.Contains(curr) ? "checked" : "")>
+                                        <label class="form-check-label ms-3 fw-bold text-dark" for="check_@curr">@curr</label>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <hr />
+                <button type="submit" class="btn btn-primary btn-lg px-5 shadow">
+                    <i class="bi bi-save me-2"></i> Uložit a aplikovat
+                </button>
+                <a asp-controller="Home" asp-action="Index" class="btn btn-link text-secondary">Zrušit</a>
+            </form>
+        </div>
+    </div>
+</div>
