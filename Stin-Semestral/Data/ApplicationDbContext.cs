@@ -16,6 +16,5 @@ namespace Stin_Semestral.Data
         public DbSet<UserSettings> Settings { get; set; }
         public DbSet<ExchangeLog> Logs { get; set; }
         public DbSet<Currency> Currencies { get; set; }
-        public DbSet<ApiMetadata> Metadata { get; set; }
     }
 }

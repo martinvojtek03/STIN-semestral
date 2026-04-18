@@ -20,62 +20,40 @@ namespace Stin_Semestral.Controllers
         // --- HLAVNÍ STRÁNKA ---
         public async Task<IActionResult> Index()
         {
-            // Načteme kurzy seřazené podle abecedy
-            var rates = await _context.Currencies.OrderBy(c => c.name).ToListAsync();
+            // 1. Získáme uživatelské nastavení (pokud neexistuje, vytvoříme default)
+            var settings = await _context.Settings.FirstOrDefaultAsync();
+            if (settings == null)
+            {
+                settings = new UserSettings { BaseCurrency = "EUR", SelectedCurrencies = "CZK,USD" };
+                _context.Settings.Add(settings);
+                await _context.SaveChangesAsync();
+            }
 
-            // Načteme metadata (poslední aktualizaci)
-            var meta = await _context.Metadata.FirstOrDefaultAsync();
+            // 2. Převedeme string "CZK,USD" na seznam (List<string>) pro snadné filtrování
+            var watchedCurrencies = settings.SelectedCurrencies
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(c => c.Trim().ToUpper())
+                .ToList();
 
-            // Pokud je databáze prázdná, rates bude prázdný seznam (nebude to házet chybu)
-            ViewBag.LastUpdate = meta?.LastUpdate;
+            // 3. Najdeme nejnovější datum v DB
+            var latestDate = await _context.Currencies.AnyAsync()
+                ? await _context.Currencies.MaxAsync(c => c.Date)
+                : DateTime.MinValue;
 
-            // Předáme seznam měn i pro dropdown v kalkulačce
-            ViewBag.CurrencyList = rates;
+            // 4. Načteme kurzy, které jsou v seznamu sledovaných měn
+            var rates = await _context.Currencies
+                .Where(c => c.Date == latestDate && watchedCurrencies.Contains(c.Name))
+                .OrderBy(c => c.Name)
+                .ToListAsync();
+
+            ViewBag.LastUpdate = latestDate == DateTime.MinValue ? "Nikdy" : latestDate.ToString("g");
+            ViewBag.BaseCurrency = settings.BaseCurrency; // Předáme informaci o hlavní měně
 
             return View(rates);
         }
 
-        // --- TLAČÍTKO AKTUALIZOVAT ---
-        [HttpPost]
-        public async Task<IActionResult> UpdateRates()
-        {
-            try
-            {
-                await _exchangeService.UpdateDatabaseRatesAsync();
-                TempData["Success"] = "Data byla úspěšně stažena z API.";
-            }
-            catch (Exception ex)
-            {
-                TempData["Error"] = $"Chyba při aktualizaci: {ex.Message}";
-            }
+        
 
-            return RedirectToAction(nameof(Index));
-        }
-
-        // --- LOGIKA KALKULAČKY ---
-        [HttpPost]
-        public async Task<IActionResult> Convert(decimal amount, string fromCurrency, string toCurrency)
-        {
-            var rates = await _context.Currencies.ToListAsync();
-            var rateFrom = rates.FirstOrDefault(r => r.name == fromCurrency)?.price;
-            var rateTo = rates.FirstOrDefault(r => r.name == toCurrency)?.price;
-
-            if (rateFrom.HasValue && rateTo.HasValue && rateFrom.Value != 0)
-            {
-                // Výpočet: (Částka / KurzZ) * KurzDo
-                // Protože kurzy jsou vůči USD (1 USD = X měny)
-                decimal result = (amount / rateFrom.Value) * rateTo.Value;
-
-                ViewBag.Result = result;
-                ViewBag.Amount = amount;
-                ViewBag.From = fromCurrency;
-                ViewBag.To = toCurrency;
-            }
-
-            // Vrátíme se na Index, ale tentokrát tam budeme mít v ViewBag výsledek
-            ViewBag.LastUpdate = (await _context.Metadata.FirstOrDefaultAsync())?.LastUpdate;
-            ViewBag.CurrencyList = rates;
-            return View("Index", rates);
-        }
+        
     }
 }

@@ -1,0 +1,102 @@
+﻿/* --- Globální nastavení --- */
+:root {
+    --primary-color: #0d6efd;
+    --dark-bg: #212529;
+    --light-gray: #f8f9fa;
+    --border-color: #dee2e6;
+}
+
+body {
+    background-color: #f4f7f6; /* Lehce šedozelené pozadí pro menší únavu očí */
+    color: #333;
+}
+
+/* --- Karta a kontejner --- */
+.card {
+    border: none;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+/* --- Vylepšená Tabulka --- */
+.table-responsive {
+    max-height: 650px;
+    overflow-y: auto;
+    border-radius: 0 0 10px 10px;
+}
+
+/* Fixní hlavička - OPRAVENÁ ČITELNOST */
+.table thead th {
+    position: sticky;
+    top: 0;
+    background-color: #e9ecef !important; /* Světle šedé pozadí */
+    color: #000000 !important; /* Čistě černý text */
+    z-index: 10;
+    border-bottom: 2px solid var(--border-color);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    padding: 12px 15px;
+}
+
+/* Řádky tabulky */
+.table tbody tr {
+    transition: background-color 0.2s ease;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(13, 110, 253, 0.05) !important;
+}
+
+/* --- Stylování dat --- */
+.font-monospace {
+    font-family: 'Cascadia Code', 'Source Code Pro', Menlo, Monaco, Consolas, monospace;
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+.text-muted {
+    font-size: 0.9rem;
+}
+
+/* --- Tlačítka --- */
+.btn-primary {
+    padding: 10px 20px;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3);
+    }
+
+/* --- Navbar a Footer --- */
+.navbar {
+    border-bottom: 3px solid var(--primary-color);
+}
+
+footer {
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+
+/* Úprava pro scrollbar (volitelné - pro hezčí posuvník v Chrome/Edge) */
+.table-responsive::-webkit-scrollbar {
+    width: 8px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 4px;
+}
+
+    .table-responsive::-webkit-scrollbar-thumb:hover {
+        background: #bbb;
+    }
