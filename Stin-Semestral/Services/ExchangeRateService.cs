@@ -11,98 +11,118 @@ namespace Stin_Semestral.Services
         private readonly ApplicationDbContext _context;
         private readonly HttpClient _httpClient;
         private readonly string _apiKey;
+        private readonly Logger _logger;
 
-        public ExchangeRateService(ApplicationDbContext context, HttpClient httpClient, IConfiguration configuration)
+        public ExchangeRateService(ApplicationDbContext context, HttpClient httpClient, IConfiguration configuration, Logger logger)
         {
             _context = context;
             _httpClient = httpClient;
             _apiKey = configuration["ExchangeRateApi:ApiKey"] ?? "";
+            _logger = logger;
+
         }
 
-        public async Task<string> GetExchangeRatesAsync()
+
+        public async Task<string> GetHistoricalRatesAsync(int daysBack)
         {
             if (string.IsNullOrEmpty(_apiKey))
             {
-                string errorMsg = "API klíč nebyl v konfiguraci nalezen!";
-                Console.WriteLine($"CHYBA: {errorMsg}");
-                await LogMessage("ERROR", errorMsg);
+                await _logger.LogMessage("ERROR", "API klíč nebyl nalezen pro historická data.");
                 return string.Empty;
             }
 
             try
             {
-                // Používáme tvou URL, source můžeš měnit dle potřeby (USD/EUR)
-                string url = $"https://api.exchangerate.host/live?access_key={_apiKey}&source=USD";
+                // 1. Výpočet data (dnes minus počet dní)
+                DateTime targetDate = DateTime.Today.AddDays(-daysBack);
+                string dateString = targetDate.ToString("yyyy-MM-dd");
+
+                // 2. Sestavení URL pro endpoint /historical
+                // API dokumentace vyžaduje parametr 'date'
+                string url = $"https://api.exchangerate.host/historical?access_key={_apiKey}&date={dateString}&source=USD";
 
                 var response = await _httpClient.GetStringAsync(url);
-                await LogMessage("INFO", $"Úspěšně staženy kurzy.");
+
+                await _logger.LogMessage("INFO", $"Úspěšně stažena historická data pro den: {dateString}");
                 return response;
             }
             catch (Exception ex)
             {
-                await LogMessage("ERROR", $"Chyba při stahování kurzů: {ex.Message}");
+                await _logger.LogMessage("ERROR", $"Chyba při stahování historických dat (dní zpět: {daysBack}): {ex.Message}");
                 return string.Empty;
             }
         }
 
-        public async Task UpdateDatabaseRatesAsync()
-{
-    // 1. Vždy stahujeme vůči USD
-    var jsonText = await GetExchangeRatesAsync();
-    
-    if (string.IsNullOrEmpty(jsonText)) return;
-
-    var data = JsonSerializer.Deserialize<ExchangeRateResponse>(jsonText, 
-        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-    if (data != null && data.Success)
-    {
-        try 
+        public async Task<string> GetExchangeRatesAsync() //stáhne aktuální kurzy měn
         {
-            var oldRates = await _context.Currencies.ToListAsync();
-            _context.Currencies.RemoveRange(oldRates);
-
-            foreach (var quote in data.Quotes)
+            if (string.IsNullOrEmpty(_apiKey))
             {
-                // Teď uřezáváme "USD" z názvů (např. USDCZK -> CZK)
-                string currencyName = quote.Key.StartsWith("USD") 
-                    ? quote.Key.Substring(3) 
-                    : quote.Key;
-
-                _context.Currencies.Add(new Currency
-                {
-                    name = currencyName,
-                    price = quote.Value // Toto je teď kurz vůči 1 USD
-                });
+                string errorMsg = "API klíč nebyl v konfiguraci nalezen!";
+                Console.WriteLine($"CHYBA: {errorMsg}");
+                await _logger.LogMessage("ERROR", errorMsg);
+                return string.Empty;
             }
 
-            var metadata = await _context.Metadata.FirstOrDefaultAsync() ?? new ApiMetadata();
-            metadata.LastUpdate = DateTimeOffset.FromUnixTimeSeconds(data.Timestamp).DateTime;
-            
-            if (metadata.Id == 0) _context.Metadata.Add(metadata);
-
-            await _context.SaveChangesAsync();
-            await LogMessage("INFO", "Databáze kurzů (základ USD) byla aktualizována.");
-        }
-        catch (Exception ex)
-        {
-            await LogMessage("ERROR", $"Chyba při ukládání USD kurzů: {ex.Message}");
-        }
-    }
-}
-
-        public async Task LogMessage(string level, string message)
-        {
-            var log = new ExchangeLog
+            try
             {
-                Timestamp = DateTime.Now,
-                Level = level,
-                Message = message
-            };
+                string url = $"https://api.exchangerate.host/live?access_key={_apiKey}&source=USD";
 
-            _context.Logs.Add(log);
-            await _context.SaveChangesAsync();
+                var response = await _httpClient.GetStringAsync(url);
+                await _logger.LogMessage("INFO", $"Úspěšně staženy kurzy.");
+                return response;
+            }
+            catch (Exception ex)
+            {
+                await _logger.LogMessage("ERROR", $"Chyba při stahování kurzů: {ex.Message}");
+                return string.Empty;
+            }
         }
+
+        public async Task UpdateDatabaseRatesAsync(string jsonText)
+        {
+            if (string.IsNullOrEmpty(jsonText)) return;
+
+            // Deserializace JSONu (používáme tvůj ExchangeRateResponse)
+            var data = JsonSerializer.Deserialize<ExchangeRateResponse>(jsonText,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (data != null && data.Success)
+            {
+                try
+                {
+                    // Převod Unix timestampu z JSONu na DateTime
+                    DateTime rateDate = DateTimeOffset.FromUnixTimeSeconds(data.Timestamp).DateTime;
+
+                    foreach (var quote in data.Quotes)
+                    {
+                        // Uřezáváme "USD" z názvů (např. USDCZK -> CZK)
+                        string currencyName = quote.Key.StartsWith("USD")
+                            ? quote.Key.Substring(3)
+                            : quote.Key;
+
+                        // Vytvoříme nový záznam typu Currency
+                        var newCurrencyRecord = new Currency
+                        {
+                            Name = currencyName,
+                            Rate = quote.Value,
+                            Date = rateDate // Ukládáme datum z JSONu
+                        };
+
+                        _context.Currencies.Add(newCurrencyRecord);
+                    }
+                    // Uložení všech změn najednou
+                    await _context.SaveChangesAsync();
+
+                    await _logger.LogMessage("INFO", $"Uloženo {data.Quotes.Count} kurzů pro datum {rateDate.ToShortDateString()}.");
+                }
+                catch (Exception ex)
+                {
+                    await _logger.LogMessage("ERROR", $"Chyba při zápisu Currency dat: {ex.Message}");
+                }
+            }
+        }
+
+        
     }
 
     // Pomocné třídy pro mapování JSONu z API
