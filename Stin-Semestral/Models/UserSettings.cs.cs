@@ -9,10 +9,10 @@ namespace Stin_Semestral.Models
 
         // Výchozí měna, vůči které se počítá (např. EUR)
         [Required]
-        public string BaseCurrency { get; set; } = "EUR";
+        public string BaseCurrency { get; set; } = "USD";
 
         // Seznam měn, které chce uživatel sledovat (např. "CZK,USD")
         [Required]
-        public string SelectedCurrencies { get; set; } = "CZK,USD";
+        public string SelectedCurrencies { get; set; } = "CZK";
     }
 }

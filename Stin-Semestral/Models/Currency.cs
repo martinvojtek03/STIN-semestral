@@ -1,12 +1,13 @@
-﻿using System.ComponentModel.DataAnnotations; // Toto je důležité pro [Key]
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace Stin_Semestral.Models
 {
     public class Currency
     {
-        [Key] 
-        public string name { get; set; }
-
-        public decimal price { get; set; }
+        public int Id { get; set; } // Automatické ID
+        [Required]
+        public string Name { get; set; } // Např. "EUR"
+        public decimal Rate { get; set; }    // Kurz vůči USD
+        public DateTime Date { get; set; }   // Ke kterému dni kurz patří
     }
 }
