@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Stin_Semestral.Data;
 
@@ -10,39 +11,14 @@ using Stin_Semestral.Data;
 namespace Stin_Semestral.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260417084919_AddCurrencyAndMetadataAndSettings")]
+    partial class AddCurrencyAndMetadataAndSettings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.10");
-
-            modelBuilder.Entity("Stin_Semestral.Models.ApiMetadata", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("LastUpdate")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Metadata");
-                });
-
-            modelBuilder.Entity("Stin_Semestral.Models.Currency", b =>
-                {
-                    b.Property<string>("name")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("price")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("name");
-
-                    b.ToTable("Currencies");
-                });
 
             modelBuilder.Entity("Stin_Semestral.Models.ExchangeLog", b =>
                 {

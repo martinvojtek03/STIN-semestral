@@ -1,17 +1,40 @@
-using Microsoft.EntityFrameworkCore;
+Ôªøusing Microsoft.EntityFrameworkCore;
 using Stin_Semestral.Data;
+using Stin_Semestral.Services;
 
-var builder = WebApplication.CreateBuilder(args); 
+var builder = WebApplication.CreateBuilder(args);
 
-// 1. Registrace datab·ze (p¯id·nÌ do kontejneru sluûeb)
+// 1. Registrace datab√°ze
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite("Data Source=stin_database.db"));
 
-// 2. Registrace HttpClient (pro budoucÌ vol·nÌ ExchangeRate API)
+// 2. Registrace HttpClient a Servis≈Ø
 builder.Services.AddHttpClient();
+builder.Services.AddScoped<ExchangeRateService>();
+
+// --- P≈òID√ÅNO: Podpora pro Controllery a View ---
+builder.Services.AddControllersWithViews();
 
 var app = builder.Build();
 
-// Tady pozdÏji p¯ibudou cesty (Endpoints) pro tvÈ API
+// --- P≈òID√ÅNO: Middleware pro statick√© soubory (CSS, JS) a routov√°n√≠ ---
+app.UseStaticFiles();
+app.UseRouting();
+
+// Tv≈Øj testovac√≠ endpoint pro API (ponech√°n)
+app.MapGet("/test-api", async (ExchangeRateService service, IConfiguration config) =>
+{
+    var keyCheck = config["ExchangeRateApi:ApiKey"];
+    var data = await service.GetExchangeRatesAsync();
+    return string.IsNullOrEmpty(data) ? Results.Problem("Chyba API") : Results.Content(data, "application/json");
+});
+
+// Tv≈Øj status endpoint (ponech√°n)
+app.MapGet("/status", () => Results.Content("<h1>Status: OK</h1>", "text/html"));
+
+// --- P≈òID√ÅNO: Mapov√°n√≠ Controller≈Ø (toto propoj√≠ HomeController s adresou /) ---
+app.MapControllerRoute(
+    name: "default",
+    pattern: "{controller=Home}/{action=Index}/{id?}");
 
 app.Run();
