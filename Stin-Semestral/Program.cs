@@ -1,40 +1,29 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Stin_Semestral.Data;
 using Stin_Semestral.Services;
+using Stin_Semestral.Models; // Přidáno pro UserSettings
 
 var builder = WebApplication.CreateBuilder(args);
 
-// --- 1. REGISTRACE SLUŽEB (Dependency Injection) ---
-
-// Registrace databáze
+// --- 1. REGISTRACE SLUŽEB ---
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite("Data Source=stin_database.db"));
 
-// Registrace HttpClient
 builder.Services.AddHttpClient();
-
-// REGISTRACE LOGGERU - Toto ti tam chybělo!
 builder.Services.AddScoped<Logger>();
-
-// Registrace tvého Exchange servisu
 builder.Services.AddScoped<ExchangeRateService>();
-
-// Podpora pro MVC (Controllery a View)
 builder.Services.AddControllersWithViews();
 
 var app = builder.Build();
 
 // --- 2. MIDDLEWARE ---
-
 app.UseStaticFiles();
 app.UseRouting();
 
-// --- 3. AUTOMATICKÁ KONTROLA DAT PŘI STARTU ---
-
+// --- 3. AUTOMATICKÁ KONTROLA DAT (Dle aktuálního nastavení) ---
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
-    // Vytáhneme logger hned na začátku, abychom ho měli pro catch blok
     var logger = services.GetRequiredService<Logger>();
 
     try
@@ -42,52 +31,57 @@ using (var scope = app.Services.CreateScope())
         var context = services.GetRequiredService<ApplicationDbContext>();
         var exchangeService = services.GetRequiredService<ExchangeRateService>();
 
-        // Zajistí, že databáze a tabulky existují
         await context.Database.EnsureCreatedAsync();
 
-        // Podíváme se, zda máme v DB data pro dnešní den
-        DateTime today = DateTime.Today;
-        bool hasTodayData = await context.Currencies.AnyAsync(c => c.Date.Date == today);
-
-        if (!hasTodayData)
+        // A. Získání AKTUÁLNÍHO nastavení
+        var settings = await context.Settings.FirstOrDefaultAsync();
+        if (settings == null)
         {
-            await logger.LogMessage("INFO", "Dnešní data nenalezena, stahuji z API...");
-
-            // Stáhneme JSON string (aktuální kurzy)
-            string json = await exchangeService.GetExchangeRatesAsync();
-
-            if (!string.IsNullOrEmpty(json))
-            {
-                // Zpracujeme a uložíme do DB
-                await exchangeService.UpdateDatabaseRatesAsync(json);
-                await logger.LogMessage("INFO", "Dnešní data byla úspěšně stažena a uložena.");
-            }
+            settings = new UserSettings { BaseCurrency = "USD", SelectedCurrencies = "CZK,EUR,USD" };
+            context.Settings.Add(settings);
+            await context.SaveChangesAsync();
         }
-        else
+
+        // B. Rozklad vybraných měn na seznam
+        var selectedCurrencies = settings.SelectedCurrencies?
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .ToList() ?? new List<string>();
+
+        // C. Kontrola, zda máme pro tyto měny data za posledních 30 dní
+        DateTime startDate = DateTime.Today.AddDays(-30);
+
+        // Zjistíme, kolik z vybraných měn má v DB kompletní historii (alespoň 28 záznamů)
+        var currenciesWithDataCount = await context.Currencies
+            .Where(c => c.Date.Date >= startDate && selectedCurrencies.Contains(c.Name))
+            .GroupBy(c => c.Name)
+            .Select(g => new { Name = g.Key, Count = g.Select(x => x.Date.Date).Distinct().Count() })
+            .Where(x => x.Count >= 28)
+            .CountAsync();
+
+        // Pokud nemáme kompletní data pro všechny vybrané měny
+        if (currenciesWithDataCount < selectedCurrencies.Count)
         {
-            // Volitelné: log do konzole, že je vše OK, ať víš, že program běží
-            Console.WriteLine("Data jsou aktuální. Startuji aplikaci...");
+            await logger.LogMessage("INFO", $"Chybí historická data pro některé z {selectedCurrencies.Count} vybraných měn. Stahuji timeframe...");
+
+            await exchangeService.UpdateDatabaseTimeframeAsync(30);
+
+            string liveJson = await exchangeService.GetExchangeRatesAsync();
+            if (!string.IsNullOrEmpty(liveJson))
+            {
+                await exchangeService.UpdateDatabaseRatesAsync(liveJson);
+            }
+
+            await logger.LogMessage("INFO", "Data pro aktuálně nastavené měny byla úspěšně doplněna.");
         }
     }
     catch (Exception ex)
     {
-        // Vypíšeme do konzole a zkusíme zalogovat do DB
-        Console.WriteLine($"KRITICKÁ CHYBA PŘI STARTU: {ex.Message}");
-        try
-        {
-            await logger.LogMessage("ERROR", $"KRITICKÁ CHYBA PŘI STARTU: {ex.Message}");
-        }
-        catch
-        {
-            /* Pokud selhala DB, víc už nenaděláme */
-        }
+        try { await logger.LogMessage("ERROR", $"KRITICKÁ CHYBA PŘI STARTU: {ex.Message}"); }
+        catch { }
     }
 }
 
 // --- 4. ROUTOVÁNÍ ---
-
-app.MapGet("/status", () => Results.Content("<h1>Status: OK</h1>", "text/html"));
-
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
