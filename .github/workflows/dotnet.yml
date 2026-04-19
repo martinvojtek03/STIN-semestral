@@ -25,7 +25,6 @@ jobs:
       run: dotnet restore
 
     - name: Build
-      # Přidali jsme parametry pro ignorování všech chyb spojených s formátováním a nullable typy
       run: dotnet build --no-restore -p:TreatWarningsAsErrors=false -p:WarningLevel=0
 
     - name: Test with Coverage
@@ -39,7 +38,6 @@ jobs:
       run: dotnet tool install -g dotnet-reportgenerator-globaltool
 
     - name: Generate Report
-      # if: always() zajistí, že se report zkusí vygenerovat, i když testy selžou
       if: always()
       run: |
         reportgenerator -reports:"./TestResults/**/*.xml" -targetdir:"coveragereport" -reporttypes:"MarkdownSummary;HtmlInline_AzurePipelines"
@@ -68,3 +66,38 @@ jobs:
                 }
             }
         }
+
+    # --- NASAZENÍ (DEPLOYMENT) ---
+    # Tento krok se spustí jen při pushi do větve main a pokud testy prošly
+    
+    - name: Publish Application
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push' && success()
+      run: dotnet publish -c Release -o ./publish_folder
+
+    - name: Inject Secrets into appsettings.json
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push' && success()
+      shell: pwsh
+      run: |
+        $path = "./publish_folder/appsettings.json"
+        if (Test-Path $path) {
+            $json = Get-Content $path | ConvertFrom-Json
+            # Vytvoření sekce ExchangeRateApi pokud neexistuje
+            if (-not $json.ExchangeRateApi) { 
+                $json | Add-Member -Type NoteProperty -Name "ExchangeRateApi" -Value (New-Object PSObject) 
+            }
+            # Vložení API klíče ze Secrets
+            $json.ExchangeRateApi | Add-Member -Type NoteProperty -Name "ApiKey" -Value "${{ secrets.EXCHANGE_RATE_API_KEY }}" -Force
+            $json | ConvertTo-Json | Set-Content $path
+            Write-Host "API Key successfully injected into appsettings.json"
+        }
+
+    - name: 🚀 Deploy to MonsterASP via FTP
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push' && success()
+      uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+      with:
+        server: ${{ secrets.FTP_SERVER }}
+        username: ${{ secrets.FTP_USERNAME }}
+        password: ${{ secrets.FTP_PASSWORD }}
+        local-dir: ./publish_folder/
+        server-dir: /wwwroot/
+        protocol: ftp
