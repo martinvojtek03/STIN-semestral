@@ -4,7 +4,6 @@ using Stin_Semestral.Services;
 using Stin_Semestral.Models;
 using Stin_Semestral.BackgroundServices;
 
-[assembly: System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
 var builder = WebApplication.CreateBuilder(args);
 
 // --- 1. REGISTRACE SLUŽEB ---
@@ -115,4 +114,5 @@ app.MapControllerRoute(
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
 app.Run();
+
 public partial class Program { }

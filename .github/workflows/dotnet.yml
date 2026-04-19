@@ -33,8 +33,8 @@ jobs:
         dotnet test --no-build --verbosity normal 
         --collect:"XPlat Code Coverage" 
         --results-directory ./TestResults
-        -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Exclude="[*Program*],[*]AspNetCoreGeneratedDocument.*,[*]Stin_Semestral.Migrations.*,[*]Stin_Semestral.Data.*,[*]Stin_Semestral.View.*,[*]Stin_Semestral.Views.*"
-
+        -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Exclude="[Stin-Semestral]Program,[*]Stin_Semestral.Migrations.*,[*]Stin_Semestral.Data.*,[*]AspNetCoreGeneratedDocument.*,[*]Stin_Semestral.View.*,[*]Stin_Semestral.Views.*"
+   
     - name: Install ReportGenerator
       run: dotnet tool install -g dotnet-reportgenerator-globaltool
 
