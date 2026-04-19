@@ -20,7 +20,7 @@ namespace Stin_Semestral.Services
         /// <summary>
         /// Ověří, zda zadané heslo odpovídá uloženému hashi.
         /// </summary>
-        public bool VerifyPassword(string hashedPassword, string providedPassword)
+        public virtual bool VerifyPassword(string hashedPassword, string providedPassword)
         {
             var result = _hasher.VerifyHashedPassword("admin", hashedPassword, providedPassword);
 

@@ -1,0 +1,63 @@
+name: .NET Core CI
+
+on:
+  push:
+    branches: 
+      - main
+      - Develop
+      - 'feat/**' # Toto zachytí všechny vìtve zaèínající na feat/ (napø. feat/login)
+  pull_request:
+    branches: 
+      - main
+      - Develop
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x # Pokud máš jinou verzi, napø. 6.0 nebo 7.0, pøepiš to sem
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --no-restore
+
+    - name: Test with Coverage
+      # Generuje data pro pokrytí kódu
+      run: dotnet test --no-build --verbosity normal --collect:"XPlat Code Coverage"
+      
+    - name: Install ReportGenerator
+      run: dotnet tool install -g dotnet-reportgenerator-globaltool
+
+    - name: Generate Report
+      # Vezme data z testù a vytvoøí èitelný souhrn
+      run: |
+        reportgenerator -reports:"**/TestResults/**/coverage.cobertura.xml" -targetdir:"coveragereport" -reporttypes:"MarkdownSummary;HtmlInline_AzurePipelines"
+
+    - name: Upload coverage summary
+      # Vloží výsledky pøímo do pøehledu (Summary) v GitHub Actions
+      run: cat coveragereport/Summary.md >> $GITHUB_STEP_SUMMARY
+
+    - name: Check Coverage Threshold
+      shell: pwsh
+      run: |
+        $summary = Get-Content "coveragereport/Summary.md" -Raw
+        # Najde procento pokrytí v souboru
+        if ($summary -match 'Line coverage: (\d+\.?\d*)%') {
+            $percent = [double]$matches[1]
+            Write-Host "Current Code Coverage: $percent%"
+            if ($percent -lt 80) {
+                Write-Error "Code coverage is below 80%! Build failed."
+                exit 1
+            }
+        } else {
+            Write-Error "Could not find coverage data in summary."
+            exit 1
+        }
