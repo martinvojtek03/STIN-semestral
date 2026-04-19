@@ -30,7 +30,6 @@ jobs:
       run: dotnet build --no-restore
 
     - name: Test with Coverage
-      # KLÍÈOVÁ ZMÌNA: Pøidány filtry Exclude pro vynechání netestovatelných souborù
       run: >
         dotnet test --no-build --verbosity normal 
         /p:CollectCoverage=true 
