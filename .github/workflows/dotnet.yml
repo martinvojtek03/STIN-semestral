@@ -16,7 +16,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    # 1. NASTAVENÍ A BUILD
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
@@ -28,7 +27,6 @@ jobs:
     - name: Build
       run: dotnet build --no-restore -p:TreatWarningsAsErrors=false -p:WarningLevel=0
 
-    # 2. SPUŠTĚNÍ TESTŮ A SBĚR DAT PRO COVERAGE
     - name: Test with Coverage
       run: >
         dotnet test --no-build --verbosity normal 
@@ -36,7 +34,6 @@ jobs:
         --results-directory ./TestResults
         -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Exclude="[Stin-Semestral]Program,[*]Stin_Semestral.Migrations.*,[*]Stin_Semestral.Data.*,[*]AspNetCoreGeneratedDocument.*,[*]Stin_Semestral.View.*,[*]Stin_Semestral.Views.*"
    
-    # 3. GENEROVÁNÍ TEST COVERAGE REPORTU (pro GitHub summary)
     - name: Install ReportGenerator
       run: dotnet tool install -g dotnet-reportgenerator-globaltool
 
@@ -54,11 +51,12 @@ jobs:
           echo "## ❌ Error: Coverage data not found." >> $GITHUB_STEP_SUMMARY
         fi
 
-    # 4. DEPLOY APLIKACE (pouze při pushi do main)
+    # --- NASAZENÍ (DEPLOYMENT) ---
+    
     - name: Publish Application
       if: github.ref == 'refs/heads/main' && github.event_name == 'push' && success()
-      # Ujisti se, že cesta k .csproj je správná (Stin_Semestral/Stin_Semestral.csproj)
-      run: dotnet publish Stin_Semestral/Stin_Semestral.csproj -c Release -o ./publish_folder
+      # Najde .csproj automaticky a publikuje ho
+      run: dotnet publish $(find . -name "*.csproj" ! -path "*/Tests/*" | head -n 1) -c Release -o ./publish_folder
 
     - name: Inject Secrets into appsettings.json
       if: github.ref == 'refs/heads/main' && github.event_name == 'push' && success()
@@ -67,12 +65,55 @@ jobs:
         $path = "./publish_folder/appsettings.json"
         if (Test-Path $path) {
             $json = Get-Content $path -Raw | ConvertFrom-Json
-            if (-not $json." ") { $json | Add-Member -Type NoteProperty -Name " " -Value (New-Object PSObject) }
+            
+            # Ošetření sekce s mezerou " "
+            if (-not $json." ") { 
+                $json | Add-Member -Type NoteProperty -Name " " -Value (New-Object PSObject) 
+            }
             $json." ".ApiKey = "${{ secrets.EXCHANGE_RATE_API_KEY }}"
-            if (-not $json.AdminSettings) { $json | Add-Member -Type NoteProperty -Name "AdminSettings" -Value (New-Object PSObject) }
-            $json.AdminSettings.PasswordHash = "${{ secrets.ADMINSETTINGS }}"
+            
+            # Ošetření sekce AdminSettings a vložení hashe jako čistý string
+            if (-not $json.AdminSettings) { 
+                $json | Add-Member -Type NoteProperty -Name "AdminSettings" -Value (New-Object PSObject) 
+            }
+            
+            # Použijeme přímé přiřazení, aby se zachovaly znaky + / =
+            $hash = @"
+            ${{ secrets.ADMINSETTINGS }}
+            "@.Trim()
+            
+                    - name: Inject Secrets into appsettings.json
+                      if: github.ref == 'refs/heads/main' && github.event_name == 'push' && success()
+                      shell: pwsh
+                      run: |
+                        $path = "./publish_folder/appsettings.json"
+                        if (Test-Path $path) {
+                            $json = Get-Content $path -Raw | ConvertFrom-Json
+
+                            if (-not $json.ExchangeRateApi) { 
+                                $json | Add-Member -Type NoteProperty -Name "ExchangeRateApi" -Value (New-Object PSObject) 
+                            }
+                            $json.ExchangeRateApi.ApiKey = "${{ secrets.EXCHANGE_RATE_API_KEY }}"
+
+                            if (-not $json.AdminSettings) { 
+                                $json | Add-Member -Type NoteProperty -Name "AdminSettings" -Value (New-Object PSObject) 
+                            }
+                            $json.AdminSettings.PasswordHash = "${{ secrets.ADMINSETTINGS }}"
+
+                            $json | ConvertTo-Json -Depth 10 | Set-Content $path -Encoding UTF8
+                            Write-Host "✅ Všechny secrety úspěšně vloženy."
+                        } else {
+                            Write-Error "❌ appsettings.json nebyl nalezen v publish_folder!"
+                            exit 1
+                        }
+            $json.AdminSettings.PasswordHash = $hash
+            
+            # Uložení s UTF8 kódováním a dostatečnou hloubkou
             $json | ConvertTo-Json -Depth 10 | Set-Content $path -Encoding UTF8
-            Write-Host "Konfigurace připravena pro produkci."
+            Write-Host "✅ Všechny secrety úspěšně vloženy."
+        } else {
+            Write-Error "❌ appsettings.json nebyl nalezen v publish_folder!"
+            exit 1
         }
 
     - name: 🚀 Deploy to MonsterASP via FTP
