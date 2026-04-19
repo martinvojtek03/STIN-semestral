@@ -1,21 +1,25 @@
-﻿using Stin_Semestral.Services;
+﻿using Stin_Semestral.Data;
+using Stin_Semestral.Services;
+using Microsoft.EntityFrameworkCore;
 
 namespace Stin_Semestral.BackgroundServices
 {
     public class ExchangeRateBackgroundService : BackgroundService
     {
         private readonly IServiceProvider _services;
-        private readonly Logger _logger;
 
-        public ExchangeRateBackgroundService(IServiceProvider services, Logger logger)
+        public ExchangeRateBackgroundService(IServiceProvider services)
         {
             _services = services;
-            _logger = logger;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            await _logger.LogMessage("INFO", "Background Service pro kurzy nastartována.");
+            using (var scope = _services.CreateScope())
+            {
+                var logger = scope.ServiceProvider.GetRequiredService<Logger>();
+                await logger.LogMessage("INFO", "Background Service pro kurzy nastartována.");
+            }
 
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -24,23 +28,37 @@ namespace Stin_Semestral.BackgroundServices
                     using (var scope = _services.CreateScope())
                     {
                         var exchangeService = scope.ServiceProvider.GetRequiredService<ExchangeRateService>();
+                        var logger = scope.ServiceProvider.GetRequiredService<Logger>();
+                        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-                        await _logger.LogMessage("INFO", "Automatické stahování denních kurzů spuštěno...");
+                        await logger.LogMessage("INFO", "Automatické stahování denních kurzů spuštěno...");
 
                         string json = await exchangeService.GetExchangeRatesAsync();
                         if (!string.IsNullOrEmpty(json))
                         {
+                            // 1. Aktualizace nových kurzů
                             await exchangeService.UpdateDatabaseRatesAsync(json);
-                            await _logger.LogMessage("INFO", "Automatická aktualizace proběhla úspěšně.");
+
+                            // 2. Úklid starých dat (starší než 30 dní)
+                            DateTime limitDate = DateTime.Today.AddDays(-30);
+                            var oldRates = dbContext.Currencies.Where(c => c.Date < limitDate);
+
+                            int deletedCount = await oldRates.ExecuteDeleteAsync(stoppingToken);
+
+                            await logger.LogMessage("INFO", $"Automatická aktualizace proběhla úspěšně. Smazáno {deletedCount} starých záznamů.");
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    await _logger.LogMessage("ERROR", $"Chyba v Background Service: {ex.Message}");
+                    using (var scope = _services.CreateScope())
+                    {
+                        var logger = scope.ServiceProvider.GetRequiredService<Logger>();
+                        await logger.LogMessage("ERROR", $"Chyba v Background Service: {ex.Message}");
+                    }
                 }
 
-                // Počkej 24 hodin (TimeSpan.FromHours(24))
+                // Počkej 24 hodin
                 await Task.Delay(TimeSpan.FromHours(24), stoppingToken);
             }
         }

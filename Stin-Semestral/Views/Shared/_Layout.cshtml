@@ -38,7 +38,9 @@
                 &copy; @DateTime.Now.Year - <strong>Semestrální práce STIN</strong>
             </div>
             <div>
-                <a href="/status" class="text-decoration-none me-3"><i class="bi bi-cpu"></i> Status systému</a>
+                <a asp-controller="Log" asp-action="Index" class="text-decoration-none me-3">
+                    <i class="bi bi-cpu"></i> Status systému (Logy)
+                </a>
                 <span class="text-secondary small">Bez registrace | Jazyk: CZ/EN</span>
             </div>
         </div>
