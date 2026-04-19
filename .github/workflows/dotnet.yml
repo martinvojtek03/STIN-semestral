@@ -1,4 +1,4 @@
-name: .NET Core CI
+﻿name: .NET Core CI
 
 on:
   push:
@@ -7,7 +7,8 @@ on:
     branches: [ main, Develop ]
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true # �e�� varov�n� o Node.js 20
+  # Umlčí varování o zastarávání Node.js 20 v GitHub runneru
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true 
 
 jobs:
   build:
@@ -25,10 +26,11 @@ jobs:
       run: dotnet restore
 
     - name: Build
-      # Zde jsme vynutili, aby varov�n� nezp�sobila p�d buildu
+      # Klíčová změna: -p:TreatWarningsAsErrors=false zajistí, že varování o "Name" v modelech nezastaví CI
       run: dotnet build --no-restore -p:TreatWarningsAsErrors=false
 
     - name: Test with Coverage
+      # Používáme pevný adresář ./TestResults, aby ReportGenerator věděl, kam jít
       run: >
         dotnet test --no-build --verbosity normal 
         --collect:"XPlat Code Coverage" 
@@ -39,15 +41,18 @@ jobs:
       run: dotnet tool install -g dotnet-reportgenerator-globaltool
 
     - name: Generate Report
+      # Prohledá složku ./TestResults pro vygenerované .xml soubory s coverage
       run: |
         reportgenerator -reports:"./TestResults/**/*.xml" -targetdir:"coveragereport" -reporttypes:"MarkdownSummary;HtmlInline_AzurePipelines"
 
     - name: Upload coverage summary
+      # Zapíše výsledek do GitHub Summary (uvidíš ho v přehledu buildu)
       run: |
         if [ -f coveragereport/Summary.md ]; then
           cat coveragereport/Summary.md >> $GITHUB_STEP_SUMMARY
         else
-          echo "## Error: Coverage Summary not found!" >> $GITHUB_STEP_SUMMARY
+          echo "## ❌ Error: Data o pokrytí nebyla nalezena!" >> $GITHUB_STEP_SUMMARY
+          exit 1
         fi
 
     - name: Check Coverage Threshold
@@ -55,18 +60,20 @@ jobs:
       run: |
         if (Test-Path "coveragereport/Summary.md") {
             $summary = Get-Content "coveragereport/Summary.md" -Raw
+            # Najde procenta u Branch coverage (pokrytí větví)
             if ($summary -match 'Branch coverage: (\d+\.?\d*)%') {
                 $percent = [double]$matches[1]
-                Write-Host "Current Branch Coverage: $percent%"
+                Write-Host "Aktuální Branch Coverage: $percent%"
                 if ($percent -lt 80) {
-                    Write-Error "Branch coverage is below 80%! Current: $percent%"
+                    Write-Error "Branch coverage je pod 80 %! Aktuálně: $percent%"
                     exit 1
                 }
+                Write-Host "✅ Coverage check prošel!"
             } else {
-                Write-Error "Could not find branch coverage percentage."
+                Write-Error "Nepodařilo se vyparsovat procenta z reportu."
                 exit 1
             }
         } else {
-            Write-Error "Summary file missing."
+            Write-Error "Soubor Summary.md chybí."
             exit 1
         }
