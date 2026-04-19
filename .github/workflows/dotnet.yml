@@ -68,12 +68,11 @@ jobs:
         }
 
     # --- NASAZENÍ (DEPLOYMENT) ---
-    # Tento krok se spustí jen při pushi do větve main a pokud testy prošly
     
     - name: Publish Application
       if: github.ref == 'refs/heads/main' && github.event_name == 'push' && success()
-      # Opraveno: Cílíme přímo na projektový soubor, aby nedošlo ke konfliktu v solution
-      run: dotnet publish ./Stin-Semestral.csproj -c Release -o ./publish_folder
+      # Používáme glob pattern **/*.csproj, aby si to samo našlo projekt kdekoli v repozitáři
+      run: dotnet publish **/*.csproj -c Release -o ./publish_folder
 
     - name: Inject Secrets into appsettings.json
       if: github.ref == 'refs/heads/main' && github.event_name == 'push' && success()
@@ -82,18 +81,12 @@ jobs:
         $path = "./publish_folder/appsettings.json"
         if (Test-Path $path) {
             $json = Get-Content $path -Raw | ConvertFrom-Json
-            
-            # 1. Oprava pro ApiKey (sekce s mezerou " ")
             if (-not $json." ") { $json | Add-Member -Type NoteProperty -Name " " -Value (New-Object PSObject) }
             $json." ".ApiKey = "${{ secrets.EXCHANGE_RATE_API_KEY }}"
-            
-            # 2. Oprava pro AdminSettings (sekce AdminSettings)
             if (-not $json.AdminSettings) { $json | Add-Member -Type NoteProperty -Name "AdminSettings" -Value (New-Object PSObject) }
             $json.AdminSettings.PasswordHash = "${{ secrets.ADMINSETTINGS }}"
-            
-            # Uložení zpět s hloubkou (pro vnořené objekty)
             $json | ConvertTo-Json -Depth 10 | Set-Content $path -Encoding UTF8
-            Write-Host "Všechny secrety (API i Hash) byly úspěšně vloženy do appsettings.json."
+            Write-Host "Secrets injected."
         }
 
     - name: 🚀 Deploy to MonsterASP via FTP
