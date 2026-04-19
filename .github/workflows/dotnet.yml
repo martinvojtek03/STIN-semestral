@@ -29,12 +29,11 @@ jobs:
       run: dotnet build --no-restore -p:TreatWarningsAsErrors=false -p:WarningLevel=0
 
     - name: Test with Coverage
-      # I kdyby build hlásil drobné chyby, zkusíme spustit testy
       run: >
         dotnet test --no-build --verbosity normal 
         --collect:"XPlat Code Coverage" 
         --results-directory ./TestResults
-        -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Exclude="[Stin-Semestral]Program,[*]AspNetCoreGeneratedDocument.*,[*]Stin_Semestral.Migrations.*,[*]Stin_Semestral.Data.*,[*]Stin_Semestral.View.*,[*]Stin_Semestral.Views.*"
+        -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Exclude="[*Program*],[*]AspNetCoreGeneratedDocument.*,[*]Stin_Semestral.Migrations.*,[*]Stin_Semestral.Data.*,[*]Stin_Semestral.View.*,[*]Stin_Semestral.Views.*"
 
     - name: Install ReportGenerator
       run: dotnet tool install -g dotnet-reportgenerator-globaltool
