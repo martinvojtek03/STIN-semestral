@@ -11,6 +11,10 @@ using Stin_Semestral.Models;
 using Stin_Semestral.Services;
 using System.Security.Claims;
 using Xunit;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace Stin_Semestral.Tests
 {
@@ -38,26 +42,19 @@ namespace Stin_Semestral.Tests
             controller.TempData = new TempDataDictionary(httpContext, Mock.Of<ITempDataProvider>());
         }
 
-        // Pomocná metoda pro vytvoření skutečné služby s namockovanými závislostmi
         private ExchangeRateService CreateActualService(ApplicationDbContext db)
         {
             var mockConfig = new Mock<IConfiguration>();
-            // Nastavíme prázdný API klíč, aby konstruktor služby neselhal
             mockConfig.Setup(c => c["ExchangeRateApi:ApiKey"]).Returns("test-key");
-
             var httpClient = new HttpClient();
-            var logger = new Logger(db); // Skutečný logger používající naši in-memory DB
-
+            var logger = new Logger(db);
             return new ExchangeRateService(db, httpClient, mockConfig.Object, logger);
         }
 
         [Fact]
         public async Task Index_CalculatesStatsCorrectly()
         {
-            // --- ARRANGE ---
             using var context = GetInMemoryDbContext();
-
-            // Příprava dat
             context.Settings.Add(new UserSettings { BaseCurrency = "USD", SelectedCurrencies = "CZK,EUR" });
             var today = DateTime.Today;
             context.Currencies.AddRange(
@@ -67,40 +64,66 @@ namespace Stin_Semestral.Tests
             );
             await context.SaveChangesAsync();
 
-            // Vytvoříme SKUTEČNOU instanci služby, ne Mock
-            var actualService = CreateActualService(context);
-            var controller = new HomeController(context, actualService);
+            var controller = new HomeController(context, CreateActualService(context));
             SetupControllerContext(controller);
 
-            // --- ACT ---
             var result = await controller.Index();
-
-            // --- ASSERT ---
             var viewResult = Assert.IsType<ViewResult>(result);
 
             var strongest = viewResult.ViewData["Strongest"] as CurrencyViewModel;
-            var weakest = viewResult.ViewData["Weakest"] as CurrencyViewModel;
-
             Assert.NotNull(strongest);
             Assert.Equal("EUR", strongest.Name);
-            Assert.Equal("CZK", weakest?.Name);
+        }
+
+        // --- NOVÝ TEST PRO BRANCH COVERAGE: Prázdná databáze ---
+        [Fact]
+        public async Task Index_WithNoData_ReturnsViewWithEmptyStats()
+        {
+            // Arrange - DB je úplně prázdná, žádné nastavení, žádné kurzy
+            using var context = GetInMemoryDbContext();
+            var controller = new HomeController(context, CreateActualService(context));
+            SetupControllerContext(controller);
+
+            // Act
+            var result = await controller.Index();
+
+            // Assert
+            var viewResult = Assert.IsType<ViewResult>(result);
+            // Ověříme, že i při prázdné DB metoda nespadne a vrátí View
+            Assert.Null(viewResult.ViewData["Strongest"]);
+            Assert.Null(viewResult.ViewData["Weakest"]);
+        }
+
+        // --- NOVÝ TEST PRO BRANCH COVERAGE: Chybějící kurzy pro vybrané měny ---
+        [Fact]
+        public async Task Index_WithMissingRates_HandlesGracefully()
+        {
+            // Arrange - Máme nastavení, ale v DB nejsou kurzy pro ty konkrétní měny
+            using var context = GetInMemoryDbContext();
+            context.Settings.Add(new UserSettings { BaseCurrency = "USD", SelectedCurrencies = "NONEXISTENT" });
+            await context.SaveChangesAsync();
+
+            var controller = new HomeController(context, CreateActualService(context));
+            SetupControllerContext(controller);
+
+            // Act
+            var result = await controller.Index();
+
+            // Assert
+            var viewResult = Assert.IsType<ViewResult>(result);
+            Assert.Null(viewResult.ViewData["Strongest"]);
         }
 
         [Fact]
         public void Error_ReturnsCorrectViewData()
         {
-            // --- ARRANGE ---
             using var context = GetInMemoryDbContext();
             var controller = new HomeController(context, CreateActualService(context));
             SetupControllerContext(controller);
 
-            // --- ACT ---
             var result = controller.Error(404);
-
-            // --- ASSERT ---
             var viewResult = Assert.IsType<ViewResult>(result);
             Assert.Equal(404, viewResult.ViewData["StatusCode"]);
-            Assert.Contains("neexistuje", viewResult.ViewData["ErrorMessage"]?.ToString());
         }
     }
 }

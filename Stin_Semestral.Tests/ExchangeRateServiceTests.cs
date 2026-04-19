@@ -83,6 +83,23 @@ namespace Stin_Semestral.Tests
         }
 
         [Fact]
+        public async Task UpdateDatabaseRatesAsync_HandlesInvalidJson()
+        {
+            // Arrange
+            using var context = GetInMemoryDbContext();
+            var service = new ExchangeRateService(context, new HttpClient(), GetMockConfig().Object, new Logger(context));
+            string invalidJson = "invalid json content"; // Tohle vyhodí výjimku při parsování
+
+            // Act
+            await service.UpdateDatabaseRatesAsync(invalidJson);
+
+            // Assert
+            // Ověříme, že v DB nic není a aplikace nespadla (vstoupilo to do catch bloku)
+            Assert.Empty(await context.Currencies.ToListAsync());
+        }
+
+
+        [Fact]
         public async Task UpdateDatabaseRatesAsync_ParsesJsonAndSavesToDb()
         {
             // --- ARRANGE ---
