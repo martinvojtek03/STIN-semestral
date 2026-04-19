@@ -30,13 +30,12 @@ jobs:
       run: dotnet build --no-restore
 
     - name: Test with Coverage
+      # Tento zápis za '--' natvrdo pøebíjí nastavení sbìraèe dat a vynucuje filtry
       run: >
         dotnet test --no-build --verbosity normal 
-        /p:CollectCoverage=true 
-        /p:CoverletOutputFormat=cobertura 
-        /p:Exclude="[Stin-Semestral]Program%2c[*]*GeneratedDocument*%2c[*]Stin_Semestral.Migrations.*%2c[*]Stin_Semestral.Data.*" 
-        --collect:"XPlat Code Coverage"
-      
+        --collect:"XPlat Code Coverage" 
+        -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Exclude="[Stin-Semestral]Program,[*]AspNetCoreGeneratedDocument.*,[*]Stin_Semestral.Migrations.*,[*]Stin_Semestral.Data.*"
+
     - name: Install ReportGenerator
       run: dotnet tool install -g dotnet-reportgenerator-globaltool
 
@@ -51,11 +50,18 @@ jobs:
       shell: pwsh
       run: |
         $summary = Get-Content "coveragereport/Summary.md" -Raw
+        # Kontrola Line Coverage (Øádky)
         if ($summary -match 'Line coverage: (\d+\.?\d*)%') {
-            $percent = [double]$matches[1]
-            Write-Host "Current Code Coverage (Filtered): $percent%"
-            if ($percent -lt 80) {
-                Write-Error "Code coverage is below 80%! Build failed."
+            $linePercent = [double]$matches[1]
+            Write-Host "Current Line Coverage: $linePercent%"
+        }
+        # Kontrola Branch Coverage (Vìtve) - toto je klíèové pro tvé zadání
+        if ($summary -match 'Branch coverage: (\d+\.?\d*)%') {
+            $branchPercent = [double]$matches[1]
+            Write-Host "Current Branch Coverage: $branchPercent%"
+            
+            if ($branchPercent -lt 80) {
+                Write-Error "Branch coverage is below 80%! Build failed."
                 exit 1
             }
         } else {
