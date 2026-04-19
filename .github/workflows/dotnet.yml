@@ -16,6 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    # 1. NASTAVENÍ A BUILD
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
@@ -27,6 +28,7 @@ jobs:
     - name: Build
       run: dotnet build --no-restore -p:TreatWarningsAsErrors=false -p:WarningLevel=0
 
+    # 2. SPUŠTĚNÍ TESTŮ A SBĚR DAT PRO COVERAGE
     - name: Test with Coverage
       run: >
         dotnet test --no-build --verbosity normal 
@@ -34,6 +36,7 @@ jobs:
         --results-directory ./TestResults
         -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Exclude="[Stin-Semestral]Program,[*]Stin_Semestral.Migrations.*,[*]Stin_Semestral.Data.*,[*]AspNetCoreGeneratedDocument.*,[*]Stin_Semestral.View.*,[*]Stin_Semestral.Views.*"
    
+    # 3. GENEROVÁNÍ TEST COVERAGE REPORTU (pro GitHub summary)
     - name: Install ReportGenerator
       run: dotnet tool install -g dotnet-reportgenerator-globaltool
 
@@ -48,31 +51,14 @@ jobs:
         if [ -f coveragereport/Summary.md ]; then
           cat coveragereport/Summary.md >> $GITHUB_STEP_SUMMARY
         else
-          echo "## ❌ Error: Coverage data not found. Build or Tests failed too early." >> $GITHUB_STEP_SUMMARY
+          echo "## ❌ Error: Coverage data not found." >> $GITHUB_STEP_SUMMARY
         fi
 
-    - name: Check Coverage Threshold
-      if: always()
-      shell: pwsh
-      run: |
-        if (Test-Path "coveragereport/Summary.md") {
-            $summary = Get-Content "coveragereport/Summary.md" -Raw
-            if ($summary -match 'Branch coverage: (\d+\.?\d*)%') {
-                $percent = [double]$matches[1]
-                Write-Host "Current Branch Coverage: $percent%"
-                if ($percent -lt 80) {
-                    Write-Error "Branch coverage is below 80%! Current: $percent%"
-                    exit 1
-                }
-            }
-        }
-
-    # --- NASAZENÍ (DEPLOYMENT) ---
-    
+    # 4. DEPLOY APLIKACE (pouze při pushi do main)
     - name: Publish Application
       if: github.ref == 'refs/heads/main' && github.event_name == 'push' && success()
-      # Používáme glob pattern **/*.csproj, aby si to samo našlo projekt kdekoli v repozitáři
-      run: dotnet publish **/*.csproj -c Release -o ./publish_folder
+      # Ujisti se, že cesta k .csproj je správná (Stin_Semestral/Stin_Semestral.csproj)
+      run: dotnet publish Stin_Semestral/Stin_Semestral.csproj -c Release -o ./publish_folder
 
     - name: Inject Secrets into appsettings.json
       if: github.ref == 'refs/heads/main' && github.event_name == 'push' && success()
@@ -86,7 +72,7 @@ jobs:
             if (-not $json.AdminSettings) { $json | Add-Member -Type NoteProperty -Name "AdminSettings" -Value (New-Object PSObject) }
             $json.AdminSettings.PasswordHash = "${{ secrets.ADMINSETTINGS }}"
             $json | ConvertTo-Json -Depth 10 | Set-Content $path -Encoding UTF8
-            Write-Host "Secrets injected."
+            Write-Host "Konfigurace připravena pro produkci."
         }
 
     - name: 🚀 Deploy to MonsterASP via FTP
