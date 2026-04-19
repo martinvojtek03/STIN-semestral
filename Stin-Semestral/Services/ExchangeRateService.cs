@@ -79,15 +79,13 @@ namespace Stin_Semestral.Services
 
             try
             {
-                // 1. Příprava dat (od -daysBack do včerejška)
                 string startDate = DateTime.Today.AddDays(-daysBack).ToString("yyyy-MM-dd");
                 string endDate = DateTime.Today.AddDays(-1).ToString("yyyy-MM-dd");
 
-                // 2. Volání Timeframe endpointu
                 string url = $"https://api.exchangerate.host/timeframe?access_key={_apiKey}&start_date={startDate}&end_date={endDate}&source=USD";
                 var response = await _httpClient.GetStringAsync(url);
 
-                // 3. Deserializace (použijeme novou třídu TimeframeResponse)
+                // Ošetření deserializace i zde pro lepší coverage
                 var data = JsonSerializer.Deserialize<TimeframeResponse>(response,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
@@ -98,7 +96,6 @@ namespace Stin_Semestral.Services
                         DateTime currentDay = DateTime.Parse(dateEntry.Key);
                         var dayQuotes = dateEntry.Value;
 
-                        // Opět ručně přidáme USD pro každý den, pokud chybí
                         if (!dayQuotes.ContainsKey("USDUSD")) dayQuotes.Add("USDUSD", 1.0m);
 
                         foreach (var quote in dayQuotes)
@@ -122,79 +119,86 @@ namespace Stin_Semestral.Services
                     await _logger.LogMessage("INFO", $"Historie za posledních {daysBack} dní úspěšně stažena a uložena.");
                 }
             }
+            catch (JsonException ex)
+            {
+                await _logger.LogMessage("ERROR", $"Neplatný JSON formát v timeframe: {ex.Message}");
+            }
             catch (Exception ex)
             {
                 await _logger.LogMessage("ERROR", $"Chyba při stahování timeframe: {ex.Message}");
             }
         }
+
         public async Task UpdateDatabaseRatesAsync(string jsonText)
         {
             if (string.IsNullOrEmpty(jsonText)) return;
 
-            var data = JsonSerializer.Deserialize<ExchangeRateResponse>(jsonText,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-            if (data != null && data.Success)
+            try
             {
-                try
+                // Deserializace uvnitř try zachytí neplatné vstupy z testů
+                var data = JsonSerializer.Deserialize<ExchangeRateResponse>(jsonText,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (data != null && data.Success)
                 {
                     DateTime rateDate = DateTimeOffset.FromUnixTimeSeconds(data.Timestamp).DateTime;
 
-                    // --- OPRAVA: RUČNÍ PŘIDÁNÍ USD ---
-                    // Pokud API vrací kurzy vůči USD, samo USD v Quotes nebude. 
-                    // Přidáme ho, aby bylo dostupné pro nastavení a přepočty.
-                    if (!data.Quotes.ContainsKey("USDUSD") && !data.Quotes.ContainsKey("USD"))
+                    if (data.Quotes != null && !data.Quotes.ContainsKey("USDUSD") && !data.Quotes.ContainsKey("USD"))
                     {
                         data.Quotes.Add("USDUSD", 1.0m);
                     }
 
-                    foreach (var quote in data.Quotes)
+                    if (data.Quotes != null)
                     {
-                        // Uřezáváme "USD" z názvů (např. USDCZK -> CZK, USDUSD -> USD)
-                        string currencyName = quote.Key.Length > 3 && quote.Key.StartsWith("USD")
-                            ? quote.Key.Substring(3)
-                            : quote.Key;
-
-                        // Pokud by po uříznutí zbyl prázdný řetězec (u klíče "USD"), nastavíme natvrdo "USD"
-                        if (string.IsNullOrEmpty(currencyName)) currencyName = "USD";
-
-                        var newCurrencyRecord = new Currency
+                        foreach (var quote in data.Quotes)
                         {
-                            Name = currencyName,
-                            Rate = quote.Value,
-                            Date = rateDate
-                        };
+                            string currencyName = quote.Key.Length > 3 && quote.Key.StartsWith("USD")
+                                ? quote.Key.Substring(3)
+                                : quote.Key;
 
-                        _context.Currencies.Add(newCurrencyRecord);
+                            if (string.IsNullOrEmpty(currencyName)) currencyName = "USD";
+
+                            var newCurrencyRecord = new Currency
+                            {
+                                Name = currencyName,
+                                Rate = quote.Value,
+                                Date = rateDate
+                            };
+
+                            _context.Currencies.Add(newCurrencyRecord);
+                        }
+
+                        await _context.SaveChangesAsync();
+                        await _logger.LogMessage("INFO", $"Uloženo {data.Quotes.Count} kurzů pro datum {rateDate.ToShortDateString()}.");
                     }
-
-                    await _context.SaveChangesAsync();
-                    await _logger.LogMessage("INFO", $"Uloženo {data.Quotes.Count} kurzů (včetně USD) pro datum {rateDate.ToShortDateString()}.");
-                }
-                catch (Exception ex)
-                {
-                    await _logger.LogMessage("ERROR", $"Chyba při zápisu Currency dat: {ex.Message}");
                 }
             }
+            catch (JsonException ex)
+            {
+                await _logger.LogMessage("ERROR", $"Neplatný formát JSON: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                await _logger.LogMessage("ERROR", $"Chyba při zpracování kurzů: {ex.Message}");
+            }
         }
-    }
 
-    public class ExchangeRateResponse
-    {
-        public bool Success { get; set; }
-        public long Timestamp { get; set; }
-        public string Source { get; set; } = string.Empty;
-        public Dictionary<string, decimal> Quotes { get; set; } = new();
-    }
-    public class TimeframeResponse
-    {
-        public bool Success { get; set; }
-        public bool Timeframe { get; set; }
-        public string Start_Date { get; set; } = string.Empty;
-        public string End_Date { get; set; } = string.Empty;
-        public string Source { get; set; } = string.Empty;
+        public class ExchangeRateResponse
+        {
+            public bool Success { get; set; }
+            public long Timestamp { get; set; }
+            public string Source { get; set; } = string.Empty;
+            public Dictionary<string, decimal> Quotes { get; set; } = new();
+        }
 
-        // Klíčem je datum "yyyy-MM-dd", hodnotou je slovník kurzů pro daný den
-        public Dictionary<string, Dictionary<string, decimal>> Quotes { get; set; } = new();
+        public class TimeframeResponse
+        {
+            public bool Success { get; set; }
+            public bool Timeframe { get; set; }
+            public string Start_Date { get; set; } = string.Empty;
+            public string End_Date { get; set; } = string.Empty;
+            public string Source { get; set; } = string.Empty;
+            public Dictionary<string, Dictionary<string, decimal>> Quotes { get; set; } = new();
+        }
     }
 }
