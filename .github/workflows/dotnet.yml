@@ -80,15 +80,19 @@ jobs:
       run: |
         $path = "./publish_folder/appsettings.json"
         if (Test-Path $path) {
-            $json = Get-Content $path | ConvertFrom-Json
-            # Vytvoření sekce ExchangeRateApi pokud neexistuje
-            if (-not $json.ExchangeRateApi) { 
-                $json | Add-Member -Type NoteProperty -Name "ExchangeRateApi" -Value (New-Object PSObject) 
-            }
-            # Vložení API klíče ze Secrets
-            $json.ExchangeRateApi | Add-Member -Type NoteProperty -Name "ApiKey" -Value "${{ secrets.EXCHANGE_RATE_API_KEY }}" -Force
-            $json | ConvertTo-Json | Set-Content $path
-            Write-Host "API Key successfully injected into appsettings.json"
+            $json = Get-Content $path -Raw | ConvertFrom-Json
+            
+            # 1. Oprava pro ApiKey (sekce s mezerou " ")
+            if (-not $json." ") { $json | Add-Member -Type NoteProperty -Name " " -Value (New-Object PSObject) }
+            $json." ".ApiKey = "${{ secrets.EXCHANGE_RATE_API_KEY }}"
+            
+            # 2. Oprava pro AdminSettings (sekce AdminSettings)
+            if (-not $json.AdminSettings) { $json | Add-Member -Type NoteProperty -Name "AdminSettings" -Value (New-Object PSObject) }
+            $json.AdminSettings.PasswordHash = "${{ secrets.ADMINSETTINGS }}"
+            
+            # Uložení zpět s hloubkou (pro vnořené objekty)
+            $json | ConvertTo-Json -Depth 10 | Set-Content $path -Encoding UTF8
+            Write-Host "Všechny secrety (API i Hash) byly úspěšně vloženy."
         }
 
     - name: 🚀 Deploy to MonsterASP via FTP
