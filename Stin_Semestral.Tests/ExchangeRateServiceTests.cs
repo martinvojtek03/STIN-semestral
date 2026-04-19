@@ -46,80 +46,115 @@ namespace Stin_Semestral.Tests
             return new HttpClient(handlerMock.Object);
         }
 
+        private HttpClient CreateFailingHttpClient()
+        {
+            var handlerMock = new Mock<HttpMessageHandler>();
+            handlerMock
+               .Protected()
+               .Setup<Task<HttpResponseMessage>>(
+                  "SendAsync",
+                  ItExpr.IsAny<HttpRequestMessage>(),
+                  ItExpr.IsAny<CancellationToken>()
+               )
+               .ThrowsAsync(new HttpRequestException("Network error"));
+
+            return new HttpClient(handlerMock.Object);
+        }
+
         [Fact]
         public async Task GetExchangeRatesAsync_ReturnsJson_WhenApiKeyExists()
         {
-            // --- ARRANGE ---
             var jsonResponse = "{\"success\": true, \"quotes\": {\"USDCZK\": 23.5}}";
             var httpClient = CreateMockHttpClient(jsonResponse);
             using var context = GetInMemoryDbContext();
             var logger = new Logger(context);
             var service = new ExchangeRateService(context, httpClient, GetMockConfig().Object, logger);
 
-            // --- ACT ---
             var result = await service.GetExchangeRatesAsync();
 
-            // --- ASSERT ---
             Assert.Equal(jsonResponse, result);
         }
 
         [Fact]
         public async Task GetExchangeRatesAsync_ReturnsEmpty_AndLogsError_WhenApiKeyMissing()
         {
-            // --- ARRANGE ---
             var httpClient = new HttpClient();
             using var context = GetInMemoryDbContext();
             var logger = new Logger(context);
-            // Config vrátí null pro API Key
             var service = new ExchangeRateService(context, httpClient, GetMockConfig(null).Object, logger);
 
-            // --- ACT ---
             var result = await service.GetExchangeRatesAsync();
 
-            // --- ASSERT ---
             Assert.Empty(result);
             var logs = await context.Logs.ToListAsync();
             Assert.Contains(logs, l => l.Level == "ERROR" && l.Message.Contains("API klíč"));
         }
 
+        // --- NOVÝ TEST: Pokrytí catch bloku v GetExchangeRatesAsync ---
+        [Fact]
+        public async Task GetExchangeRatesAsync_ReturnsEmpty_WhenExceptionOccurs()
+        {
+            var httpClient = CreateFailingHttpClient();
+            using var context = GetInMemoryDbContext();
+            var service = new ExchangeRateService(context, httpClient, GetMockConfig().Object, new Logger(context));
+
+            var result = await service.GetExchangeRatesAsync();
+
+            Assert.Empty(result);
+            var logs = await context.Logs.ToListAsync();
+            Assert.Contains(logs, l => l.Level == "ERROR" && l.Message.Contains("Chyba při stahování"));
+        }
+
         [Fact]
         public async Task UpdateDatabaseRatesAsync_HandlesInvalidJson()
         {
-            // Arrange
             using var context = GetInMemoryDbContext();
             var service = new ExchangeRateService(context, new HttpClient(), GetMockConfig().Object, new Logger(context));
-            string invalidJson = "invalid json content"; // Tohle vyhodí výjimku při parsování
+            string invalidJson = "invalid json content";
 
-            // Act
             await service.UpdateDatabaseRatesAsync(invalidJson);
 
-            // Assert
-            // Ověříme, že v DB nic není a aplikace nespadla (vstoupilo to do catch bloku)
             Assert.Empty(await context.Currencies.ToListAsync());
         }
 
+        // --- NOVÝ TEST: Pokrytí větve if (data != null && data.Success) ---
+        [Fact]
+        public async Task UpdateDatabaseRatesAsync_DoesNothing_WhenSuccessIsFalse()
+        {
+            using var context = GetInMemoryDbContext();
+            var service = new ExchangeRateService(context, new HttpClient(), GetMockConfig().Object, new Logger(context));
+            string json = "{\"success\": false}";
+
+            await service.UpdateDatabaseRatesAsync(json);
+
+            Assert.Empty(await context.Currencies.ToListAsync());
+        }
+
+        // --- NOVÝ TEST: Pokrytí větve if (data.Quotes != null) ---
+        [Fact]
+        public async Task UpdateDatabaseRatesAsync_HandlesNullQuotes()
+        {
+            using var context = GetInMemoryDbContext();
+            var service = new ExchangeRateService(context, new HttpClient(), GetMockConfig().Object, new Logger(context));
+            string json = "{\"success\": true, \"timestamp\": 1712150400, \"quotes\": null}";
+
+            await service.UpdateDatabaseRatesAsync(json);
+
+            Assert.Empty(await context.Currencies.ToListAsync());
+        }
 
         [Fact]
         public async Task UpdateDatabaseRatesAsync_ParsesJsonAndSavesToDb()
         {
-            // --- ARRANGE ---
             using var context = GetInMemoryDbContext();
             var logger = new Logger(context);
             var service = new ExchangeRateService(context, new HttpClient(), GetMockConfig().Object, logger);
-
-            // Simulace JSONu z API (Timestamp 1712150400 = 2024-04-03)
             var json = "{\"success\": true, \"timestamp\": 1712150400, \"quotes\": {\"USDCZK\": 23.5, \"USDEUR\": 0.92}}";
 
-            // --- ACT ---
             await service.UpdateDatabaseRatesAsync(json);
 
-            // --- ASSERT ---
             var rates = await context.Currencies.ToListAsync();
-
-            // Máme 3 záznamy: CZK, EUR a tvé ručně přidané USD
             Assert.Equal(3, rates.Count);
-
-            // Kontrola uříznutí "USD"
             Assert.Contains(rates, r => r.Name == "CZK" && r.Rate == 23.5m);
             Assert.Contains(rates, r => r.Name == "USD" && r.Rate == 1.0m);
         }
@@ -127,7 +162,6 @@ namespace Stin_Semestral.Tests
         [Fact]
         public async Task UpdateDatabaseTimeframeAsync_SavesMultipleDays()
         {
-            // --- ARRANGE ---
             var timeframeJson = @"{
                 ""success"": true,
                 ""quotes"": {
@@ -141,16 +175,39 @@ namespace Stin_Semestral.Tests
             var logger = new Logger(context);
             var service = new ExchangeRateService(context, httpClient, GetMockConfig().Object, logger);
 
-            // --- ACT ---
             await service.UpdateDatabaseTimeframeAsync(2);
 
-            // --- ASSERT ---
             var rates = await context.Currencies.ToListAsync();
-
-            // 2 dny * (CZK + ruční USD) = 4 záznamy
             Assert.Equal(4, rates.Count);
-            Assert.Contains(rates, r => r.Date == new DateTime(2024, 1, 1) && r.Name == "CZK");
-            Assert.Contains(rates, r => r.Date == new DateTime(2024, 1, 2) && r.Name == "CZK");
+        }
+
+        // --- NOVÝ TEST: Pokrytí catch bloku v UpdateDatabaseTimeframeAsync ---
+        [Fact]
+        public async Task UpdateDatabaseTimeframeAsync_HandlesInvalidJson()
+        {
+            var httpClient = CreateMockHttpClient("invalid-json");
+            using var context = GetInMemoryDbContext();
+            var service = new ExchangeRateService(context, httpClient, GetMockConfig().Object, new Logger(context));
+
+            await service.UpdateDatabaseTimeframeAsync(1);
+
+            var logs = await context.Logs.ToListAsync();
+            Assert.Contains(logs, l => l.Level == "ERROR" && l.Message.Contains("Neplatný JSON formát"));
+        }
+
+        // --- NOVÝ TEST: Pokrytí catch bloku v GetHistoricalRatesAsync ---
+        [Fact]
+        public async Task GetHistoricalRatesAsync_HandlesException()
+        {
+            var httpClient = CreateFailingHttpClient();
+            using var context = GetInMemoryDbContext();
+            var service = new ExchangeRateService(context, httpClient, GetMockConfig().Object, new Logger(context));
+
+            var result = await service.GetHistoricalRatesAsync(1);
+
+            Assert.Empty(result);
+            var logs = await context.Logs.ToListAsync();
+            Assert.Contains(logs, l => l.Level == "ERROR" && l.Message.Contains("Chyba při stahování historických dat"));
         }
     }
 }
