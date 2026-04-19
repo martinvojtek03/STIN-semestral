@@ -1,7 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Stin_Semestral.Data;
 using Stin_Semestral.Services;
-using Stin_Semestral.Models; // Přidáno pro UserSettings
+using Stin_Semestral.Models;
+using Stin_Semestral.BackgroundServices;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,6 +14,7 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<Logger>();
 builder.Services.AddScoped<ExchangeRateService>();
 builder.Services.AddControllersWithViews();
+builder.Services.AddHostedService<ExchangeRateBackgroundService>();
 
 var app = builder.Build();
 
