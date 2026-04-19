@@ -45,7 +45,6 @@
                         <th class="ps-4">MĚNA</th>
                         <th>KURZ (@ViewBag.BaseCurrency)</th>
                         <th>30D PRŮMĚR</th>
-                        <th>STAV</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -55,16 +54,6 @@
                             <td class="ps-4 fw-bold">@item.Name</td>
                             <td class="text-primary fw-bold">@item.CurrentRate.ToString("N4")</td>
                             <td>@item.Average30Days.ToString("N4")</td>
-                            <td>
-                                @if (item.CurrentRate >= item.Average30Days)
-                                {
-                                    <span class="text-success small"><i class="bi bi-arrow-up-right"></i> Nad průměrem</span>
-                                }
-                                else
-                                {
-                                    <span class="text-danger small"><i class="bi bi-arrow-down-right"></i> Pod průměrem</span>
-                                }
-                            </td>
                         </tr>
                     }
                 </tbody>
@@ -76,7 +65,7 @@
     <div class="row">
         @foreach (var item in Model)
         {
-            @if (item.Name != ViewBag.BaseCurrency) // Základní měna graf nepotřebuje (je to rovná čára 1.0)
+            @if (item.Name != ViewBag.BaseCurrency)
             {
                 <div class="col-lg-6 mb-4">
                     <div class="card shadow-sm border-0">
@@ -104,40 +93,40 @@
             if (item.Name != ViewBag.BaseCurrency && !string.IsNullOrEmpty(item.HistoryJson))
             {
                 <text>
-                            (function() {
-                                const ctx = document.getElementById('chart-@item.Name').getContext('2d');
-                                const data = @Html.Raw(item.HistoryJson);
+                        (function() {
+                            const ctx = document.getElementById('chart-@item.Name').getContext('2d');
+                            const data = @Html.Raw(item.HistoryJson);
 
-                                new Chart(ctx, {
-                                    type: 'line',
-                                    data: {
-                                        labels: data.map((_, i) => i + 1),
-                                        datasets: [{
-                                            label: 'Kurz',
-                                            data: data,
-                                            borderColor: '#0d6efd',
-                                            backgroundColor: 'rgba(13, 110, 253, 0.05)',
-                                            fill: true,
-                                            tension: 0.3,
-                                            pointRadius: 0, // Skryje body pro hladší vzhled
-                                            borderWidth: 2
-                                        }]
-                                    },
-                                    options: {
-                                        responsive: true,
-                                        maintainAspectRatio: false,
-                                        plugins: { legend: { display: false } },
-                                        scales: {
-                                            x: { display: false },
-                                            y: {
-                                                beginAtZero: false,
-                                                grace: '5%',
-                                                ticks: { font: { size: 10 } }
-                                            }
+                            new Chart(ctx, {
+                                type: 'line',
+                                data: {
+                                    labels: data.map((_, i) => i + 1),
+                                    datasets: [{
+                                        label: 'Kurz',
+                                        data: data,
+                                        borderColor: '#0d6efd',
+                                        backgroundColor: 'rgba(13, 110, 253, 0.05)',
+                                        fill: true,
+                                        tension: 0.3,
+                                        pointRadius: 0,
+                                        borderWidth: 2
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    plugins: { legend: { display: false } },
+                                    scales: {
+                                        x: { display: false },
+                                        y: {
+                                            beginAtZero: false,
+                                            grace: '5%',
+                                            ticks: { font: { size: 10 } }
                                         }
                                     }
-                                });
-                            })();
+                                }
+                            });
+                        })();
                 </text>
             }
         }
