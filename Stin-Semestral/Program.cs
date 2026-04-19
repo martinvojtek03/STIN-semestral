@@ -3,7 +3,6 @@ using Stin_Semestral.Data;
 using Stin_Semestral.Services;
 using Stin_Semestral.Models;
 using Stin_Semestral.BackgroundServices;
-using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -115,3 +114,5 @@ app.MapControllerRoute(
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
 app.Run();
+
+public partial class Program { }
