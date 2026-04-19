@@ -7,7 +7,11 @@ using Moq;
 using Stin_Semestral.Controllers;
 using Stin_Semestral.Data;
 using Stin_Semestral.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Security.Claims;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace Stin_Semestral.Tests
@@ -41,12 +45,11 @@ namespace Stin_Semestral.Tests
             // --- ARRANGE ---
             using var context = GetInMemoryDbContext();
 
-            // Přidáme nějaké měny do historie, aby se měly z čeho brát checkboxy
             context.Currencies.AddRange(
                 new Currency { Name = "USD", Rate = 1.0m, Date = DateTime.Today },
                 new Currency { Name = "EUR", Rate = 0.9m, Date = DateTime.Today },
                 new Currency { Name = "CZK", Rate = 23.0m, Date = DateTime.Today },
-                new Currency { Name = "USD", Rate = 1.0m, Date = DateTime.Today.AddDays(-1) } // Duplicita pro test Distinct
+                new Currency { Name = "USD", Rate = 1.0m, Date = DateTime.Today.AddDays(-1) }
             );
 
             context.Settings.Add(new UserSettings { BaseCurrency = "EUR", SelectedCurrencies = "USD,CZK" });
@@ -62,15 +65,32 @@ namespace Stin_Semestral.Tests
             var viewResult = Assert.IsType<ViewResult>(result);
             var model = Assert.IsType<UserSettings>(viewResult.Model);
 
-            // Kontrola nastavení
             Assert.Equal("EUR", model.BaseCurrency);
 
-            // Kontrola ViewBag.AllCurrencies (musí být 3 unikátní měny, seřazené)
             var allCurrencies = viewResult.ViewData["AllCurrencies"] as List<string>;
             Assert.NotNull(allCurrencies);
             Assert.Equal(3, allCurrencies.Count);
-            Assert.Equal("CZK", allCurrencies[0]); // Abecední řazení
+            Assert.Equal("CZK", allCurrencies[0]);
             Assert.Equal("USD", allCurrencies[2]);
+        }
+
+        // --- NOVÝ TEST: Pokrytí větve if (settings == null) v Index ---
+        [Fact]
+        public async Task Index_CreatesDefaultSettings_IfNoneExist()
+        {
+            // Arrange
+            using var context = GetInMemoryDbContext();
+            var controller = new SettingsController(context);
+            SetupControllerContext(controller);
+
+            // Act
+            var result = await controller.Index();
+
+            // Assert
+            var viewResult = Assert.IsType<ViewResult>(result);
+            var model = Assert.IsType<UserSettings>(viewResult.Model);
+            Assert.Equal("USD", model.BaseCurrency); // Výchozí hodnota z kódu
+            Assert.Equal("CZK,EUR", model.SelectedCurrencies); // Výchozí hodnota z kódu
         }
 
         [Fact]
@@ -90,12 +110,10 @@ namespace Stin_Semestral.Tests
             var result = await controller.Save("EUR", newSelected);
 
             // --- ASSERT ---
-            // 1. Kontrola přesměrování
             var redirectResult = Assert.IsType<RedirectToActionResult>(result);
             Assert.Equal("Index", redirectResult.ActionName);
             Assert.Equal("Home", redirectResult.ControllerName);
 
-            // 2. Kontrola uložení v DB
             var updatedSettings = await context.Settings.FirstOrDefaultAsync();
             Assert.NotNull(updatedSettings);
             Assert.Equal("EUR", updatedSettings.BaseCurrency);
@@ -106,7 +124,7 @@ namespace Stin_Semestral.Tests
         public async Task Save_CreatesNewSettings_IfNoneExist()
         {
             // --- ARRANGE ---
-            using var context = GetInMemoryDbContext(); // DB je prázdná
+            using var context = GetInMemoryDbContext();
             var controller = new SettingsController(context);
             SetupControllerContext(controller);
 
@@ -118,6 +136,24 @@ namespace Stin_Semestral.Tests
             Assert.NotNull(createdSettings);
             Assert.Equal("USD", createdSettings.BaseCurrency);
             Assert.Equal("CZK", createdSettings.SelectedCurrencies);
+        }
+
+        // --- NOVÝ TEST: Pokrytí větve pro null SelectedCurrencies ---
+        [Fact]
+        public async Task Save_HandlesNullSelectedCurrencies()
+        {
+            // Arrange
+            using var context = GetInMemoryDbContext();
+            var controller = new SettingsController(context);
+            SetupControllerContext(controller);
+
+            // Act
+            await controller.Save("USD", null);
+
+            // Assert
+            var settings = await context.Settings.FirstOrDefaultAsync();
+            Assert.NotNull(settings);
+            Assert.Equal("", settings.SelectedCurrencies); // Mělo by uložit prázdný řetězec
         }
     }
 }
