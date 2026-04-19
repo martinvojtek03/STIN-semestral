@@ -72,7 +72,8 @@ jobs:
     
     - name: Publish Application
       if: github.ref == 'refs/heads/main' && github.event_name == 'push' && success()
-      run: dotnet publish -c Release -o ./publish_folder
+      # Opraveno: Cílíme přímo na projektový soubor, aby nedošlo ke konfliktu v solution
+      run: dotnet publish ./Stin-Semestral.csproj -c Release -o ./publish_folder
 
     - name: Inject Secrets into appsettings.json
       if: github.ref == 'refs/heads/main' && github.event_name == 'push' && success()
@@ -92,7 +93,7 @@ jobs:
             
             # Uložení zpět s hloubkou (pro vnořené objekty)
             $json | ConvertTo-Json -Depth 10 | Set-Content $path -Encoding UTF8
-            Write-Host "Všechny secrety (API i Hash) byly úspěšně vloženy."
+            Write-Host "Všechny secrety (API i Hash) byly úspěšně vloženy do appsettings.json."
         }
 
     - name: 🚀 Deploy to MonsterASP via FTP
