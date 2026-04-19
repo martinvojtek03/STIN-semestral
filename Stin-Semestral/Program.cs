@@ -51,6 +51,8 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.UseStatusCodePagesWithReExecute("/Home/Error/{0}"); // {0} se nahradí kódem chyby (např. 404)
+
 // --- 3. INICIALIZACE DATABÁZE A KONTROLA DAT ---
 using (var scope = app.Services.CreateScope())
 {

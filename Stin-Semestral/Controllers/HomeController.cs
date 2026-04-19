@@ -8,7 +8,6 @@ using System.Text.Json;
 
 namespace Stin_Semestral.Controllers
 {
-    [Authorize]
     public class HomeController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -20,17 +19,18 @@ namespace Stin_Semestral.Controllers
             _exchangeService = exchangeService;
         }
 
-        // --- HLAVNÍ STRÁNKA ---
+        // --- HLAVNÍ STRÁNKA (Veřejná) ---
+        [Authorize]
         public async Task<IActionResult> Index()
         {
-            // 1. Načtení nastavení (Perzistence dle bodu 3.4)
+            // 1. Načtení nastavení
             var settings = await _context.Settings.FirstOrDefaultAsync()
                            ?? new UserSettings { BaseCurrency = "USD", SelectedCurrencies = "CZK,EUR,USD" };
 
             var watched = settings.SelectedCurrencies?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>();
             DateTime thirtyDaysAgo = DateTime.Today.AddDays(-30);
 
-            // 2. Načtení všech potřebných dat jedním dotazem (Rychlost dle bodu 3.5)
+            // 2. Načtení dat
             var relevantCurrencies = watched.ToList();
             if (!relevantCurrencies.Contains(settings.BaseCurrency))
                 relevantCurrencies.Add(settings.BaseCurrency);
@@ -41,7 +41,7 @@ namespace Stin_Semestral.Controllers
 
             if (!allData.Any()) return View(new List<CurrencyViewModel>());
 
-            // 3. Příprava mapy kurzů základní měny pro bleskový přepočet
+            // 3. Příprava mapy kurzů
             var baseCurrencyMap = allData
                 .Where(c => c.Name == settings.BaseCurrency)
                 .GroupBy(c => c.Date.Date)
@@ -49,7 +49,7 @@ namespace Stin_Semestral.Controllers
 
             var latestDate = allData.Max(c => c.Date);
 
-            // 4. Výpočet statistik (Bod 3.3 - Aritmetický průměr)
+            // 4. Výpočet statistik
             var displayData = new List<CurrencyViewModel>();
 
             foreach (var name in watched)
@@ -59,7 +59,6 @@ namespace Stin_Semestral.Controllers
 
                 if (today == null) continue;
 
-                // Přepočet všech historických bodů vůči základní měně daného dne
                 var convertedRates = history
                     .Where(h => baseCurrencyMap.ContainsKey(h.Date.Date))
                     .Select(h => h.Rate / baseCurrencyMap[h.Date.Date])
@@ -70,21 +69,15 @@ namespace Stin_Semestral.Controllers
                     Name = name,
                     CurrentRate = today.Rate / (baseCurrencyMap.GetValueOrDefault(today.Date.Date, 1.0m)),
                     Average30Days = convertedRates.Any() ? convertedRates.Average() : 0,
-                    // Oprava: Bereme posledních 30 měření pro kompletní graf
                     HistoryJson = JsonSerializer.Serialize(convertedRates.TakeLast(30))
                 });
             }
 
-            // 5. OPRAVA: Nejsilnější a nejslabší měna (Bod 3.2)
-            // Nejsilnější měna = nejvyšší hodnota (např. 1 GBP stojí hodně USD -> kurz je malé číslo jako 0.7)
-            // Nejslabší měna = nejnižší hodnota (např. 1 SOS stojí málo USD -> kurz je velké číslo jako 500+)
+            // 5. Nejsilnější a nejslabší měna
             var competitors = displayData.Where(d => d.Name != settings.BaseCurrency).ToList();
             if (competitors.Any())
             {
-                // Nejsilnější = nejmenší kurz (OrderBy)
                 ViewBag.Strongest = competitors.OrderBy(x => x.CurrentRate).First();
-
-                // Nejslabší = největší kurz (OrderByDescending)
                 ViewBag.Weakest = competitors.OrderByDescending(x => x.CurrentRate).First();
             }
 
@@ -93,7 +86,8 @@ namespace Stin_Semestral.Controllers
             return View(displayData);
         }
 
-        // --- POMOCNÁ METODA PRO RUČNÍ AKTUALIZACI ---
+        // --- RUČNÍ AKTUALIZACE (Pouze pro přihlášené) ---
+        [Authorize] // Tuto metodu smí volat jen přihlášený admin
         [HttpPost]
         public async Task<IActionResult> UpdateRates()
         {
@@ -103,6 +97,33 @@ namespace Stin_Semestral.Controllers
                 await _exchangeService.UpdateDatabaseRatesAsync(json);
             }
             return RedirectToAction("Index");
+        }
+
+        // --- CHYBOVÁ STRÁNKA (Veřejná) ---
+        [AllowAnonymous]
+        [Route("Home/Error/{statusCode?}")]
+        public IActionResult Error(int? statusCode)
+        {
+            if (statusCode.HasValue)
+            {
+                if (statusCode == 404)
+                {
+                    ViewBag.ErrorMessage = "Stránka, kterou hledáte, neexistuje.";
+                    ViewBag.Icon = "bi-search";
+                }
+                else if (statusCode == 403)
+                {
+                    ViewBag.ErrorMessage = "Sem nemáte přístup. Tato sekce je pouze pro administrátory.";
+                    ViewBag.Icon = "bi-shield-lock";
+                }
+                else
+                {
+                    ViewBag.ErrorMessage = "Něco se pokazilo na naší straně. Zkuste to prosím později.";
+                    ViewBag.Icon = "bi-exclamation-triangle";
+                }
+                ViewBag.StatusCode = statusCode;
+            }
+            return View();
         }
     }
 }
