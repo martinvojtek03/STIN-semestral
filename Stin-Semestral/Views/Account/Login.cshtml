@@ -1,0 +1,30 @@
+﻿@{
+    ViewData["Title"] = "Přihlášení";
+}
+
+<div class="row justify-content-center mt-5">
+    <div class="col-md-4">
+        <div class="card shadow">
+            <div class="card-header bg-dark text-white text-center">
+                <h4>Admin Login</h4>
+            </div>
+            <div class="card-body">
+                @if (ViewBag.Error != null)
+                {
+                    <div class="alert alert-danger small">@ViewBag.Error</div>
+                }
+                <form asp-action="Login" method="post">
+                    <div class="mb-3">
+                        <label class="form-label">Uživatel</label>
+                        <input type="text" name="username" class="form-control" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Heslo</label>
+                        <input type="password" name="password" class="form-control" required />
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Vstoupit</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
