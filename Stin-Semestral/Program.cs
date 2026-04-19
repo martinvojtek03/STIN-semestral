@@ -3,8 +3,8 @@ using Stin_Semestral.Data;
 using Stin_Semestral.Services;
 using Stin_Semestral.Models;
 using Stin_Semestral.BackgroundServices;
-using Microsoft.AspNetCore.Mvc;
 
+[assembly: System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
 var builder = WebApplication.CreateBuilder(args);
 
 // --- 1. REGISTRACE SLUŽEB ---
