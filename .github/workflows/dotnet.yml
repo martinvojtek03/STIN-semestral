@@ -2,13 +2,19 @@ name: .NET Core CI
 
 on:
   push:
-    branches: [ main, Develop, 'feat/**' ]
+    branches: 
+      - main
+      - Develop
+      - 'feat/**'
   pull_request:
-    branches: [ main, Develop ]
+    branches: 
+      - main
+      - Develop
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
     - uses: actions/checkout@v4
     
@@ -24,11 +30,11 @@ jobs:
       run: dotnet build --no-restore
 
     - name: Test with Coverage
-      # Tady jsme pøidali filtry, které vyøadí všechno, co ti kazí prùmìr
+      # Tento zápis za '--' natvrdo pøebíjí nastavení sbìraèe dat a vynucuje filtry
       run: >
         dotnet test --no-build --verbosity normal 
         --collect:"XPlat Code Coverage" 
-        -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Exclude="[Stin-Semestral]Program,[*]AspNetCoreGeneratedDocument.*,[*]Stin_Semestral.Migrations.*,[*]Stin_Semestral.Data.*,[*]Stin_Semestral.View.*,[*]Stin_Semestral.Views.*"
+        -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Exclude="[Stin-Semestral]Program,[*]AspNetCoreGeneratedDocument.*,[*]Stin_Semestral.Migrations.*,[*]Stin_Semestral.Data.*"
 
     - name: Install ReportGenerator
       run: dotnet tool install -g dotnet-reportgenerator-globaltool
@@ -44,14 +50,21 @@ jobs:
       shell: pwsh
       run: |
         $summary = Get-Content "coveragereport/Summary.md" -Raw
+        # Kontrola Line Coverage (Øádky)
+        if ($summary -match 'Line coverage: (\d+\.?\d*)%') {
+            $linePercent = [double]$matches[1]
+            Write-Host "Current Line Coverage: $linePercent%"
+        }
+        # Kontrola Branch Coverage (Vìtve) - toto je klíèové pro tvé zadání
         if ($summary -match 'Branch coverage: (\d+\.?\d*)%') {
             $branchPercent = [double]$matches[1]
-            Write-Host "Aktuální Branch Coverage: $branchPercent%"
+            Write-Host "Current Branch Coverage: $branchPercent%"
+            
             if ($branchPercent -lt 80) {
-                Write-Error "Branch coverage je pod 80 %! Build selhal."
+                Write-Error "Branch coverage is below 80%! Build failed."
                 exit 1
             }
         } else {
-            Write-Error "Nepodaøilo se najít data o pokrytí."
+            Write-Error "Could not find coverage data in summary."
             exit 1
         }
